@@ -1,0 +1,51 @@
+{
+    // 🦀 Rust Development
+    "rust-analyzer.checkOnSave.command": "clippy",
+    "rust-analyzer.cargo.features": "all",
+    "rust-analyzer.diagnostics.enable": true,
+    "rust-analyzer.completion.addCallParenthesis": true,
+    "rust-analyzer.completion.addCallArgumentSnippets": true,
+    // 🤖 GitHub Copilot
+    "github.copilot.enable": {
+        "*": true,
+        "rust": true,
+        "markdown": true,
+        "toml": true,
+        "json": true
+    },
+    // 🔧 Editor Configuration
+    "editor.formatOnSave": true,
+    "editor.codeActionsOnSave": {
+        "source.fixAll": "explicit",
+        "source.organizeImports": "explicit"
+    },
+    "editor.rulers": [
+        100
+    ],
+    "editor.wordWrap": "bounded",
+    "editor.wordWrapColumn": 100,
+    // 📁 File Associations
+    "files.associations": {
+        "*.rs": "rust",
+        "Cargo.toml": "toml",
+        "Cargo.lock": "toml"
+    },
+    // 💻 Terminal
+    "terminal.integrated.defaultProfile.linux": "zsh",
+    // 🎨 Git & UI
+    "git.enableCommitSigning": false,
+    "git.confirmSync": false,
+    "git.autofetch": true,
+    "workbench.colorTheme": "GitHub Dark",
+    "workbench.iconTheme": "material-icon-theme",
+    // 📂 Explorer
+    "explorer.fileNesting.enabled": true,
+    "explorer.fileNesting.patterns": {
+        "Cargo.toml": "Cargo.lock",
+        "*.rs": "${capture}.rlib",
+        "mod.rs": "*.rs"
+    },
+    // 🐍 Python (legacy)
+    "python-envs.defaultEnvManager": "ms-python.python:system",
+    "python-envs.pythonProjects": []
+}

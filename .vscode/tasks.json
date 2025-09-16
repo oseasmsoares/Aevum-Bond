@@ -1,0 +1,86 @@
+{
+  "version": "2.0.0",
+  "tasks": [
+    {
+      "label": "🦀 Build All",
+      "type": "shell",
+      "command": "cargo",
+      "args": [
+        "build",
+        "--workspace"
+      ],
+      "group": "build",
+      "presentation": {
+        "echo": true,
+        "reveal": "always",
+        "focus": false,
+        "panel": "shared"
+      },
+      "problemMatcher": [
+        "$rustc"
+      ]
+    },
+    {
+      "label": "🧪 Test All",
+      "type": "shell",
+      "command": "cargo",
+      "args": [
+        "test",
+        "--workspace",
+        "--",
+        "--nocapture"
+      ],
+      "group": "test",
+      "presentation": {
+        "echo": true,
+        "reveal": "always",
+        "focus": false,
+        "panel": "shared"
+      },
+      "problemMatcher": [
+        "$rustc"
+      ]
+    },
+    {
+      "label": "🔍 Clippy Check",
+      "type": "shell",
+      "command": "cargo",
+      "args": [
+        "clippy",
+        "--workspace",
+        "--",
+        "-D",
+        "warnings"
+      ],
+      "group": "build",
+      "problemMatcher": [
+        "$rustc"
+      ]
+    },
+    {
+      "label": "🚀 Sprint Demo",
+      "type": "shell",
+      "command": "cargo",
+      "args": [
+        "run"
+      ],
+      "group": "build",
+      "dependsOn": [
+        "🧪 Test All"
+      ],
+      "problemMatcher": [
+        "$rustc"
+      ]
+    },
+    {
+      "label": "🔧 Format Code",
+      "type": "shell",
+      "command": "cargo",
+      "args": [
+        "fmt",
+        "--all"
+      ],
+      "group": "build"
+    }
+  ]
+}

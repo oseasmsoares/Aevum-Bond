@@ -1,0 +1,157 @@
+name: 🤖 IA-Enhanced CI/CD
+
+on:
+  push:
+    branches: [ main, develop ]
+  pull_request:
+    branches: [ main ]
+
+env:
+  CARGO_TERM_COLOR: always
+  RUST_BACKTRACE: 1
+
+jobs:
+  # 🔍 Code Quality Check
+  quality:
+    name: 🔧 Code Quality
+    runs-on: ubuntu-latest
+    steps:
+      - name: 📥 Checkout
+        uses: actions/checkout@v4
+        
+      - name: 🦀 Install Rust
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          components: rustfmt, clippy
+          
+      - name: 💾 Cache Dependencies
+        uses: actions/cache@v3
+        with:
+          path: |
+            ~/.cargo/bin/
+            ~/.cargo/registry/index/
+            ~/.cargo/registry/cache/
+            ~/.cargo/git/db/
+            target/
+          key: ${{ runner.os }}-cargo-${{ hashFiles('**/Cargo.lock') }}
+          
+      - name: 🎨 Format Check
+        run: cargo fmt --all -- --check
+        
+      - name: 🔍 Clippy Check
+        run: cargo clippy --workspace --all-targets --all-features -- -D warnings
+        
+      - name: 🔒 Security Audit
+        run: |
+          cargo install cargo-audit
+          cargo audit
+
+  # 🧪 Testing
+  test:
+    name: 🧪 Tests
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        rust: [stable, beta]
+    steps:
+      - name: 📥 Checkout
+        uses: actions/checkout@v4
+        
+      - name: 🦀 Install Rust ${{ matrix.rust }}
+        uses: dtolnay/rust-toolchain@master
+        with:
+          toolchain: ${{ matrix.rust }}
+          
+      - name: 💾 Cache Dependencies
+        uses: actions/cache@v3
+        with:
+          path: |
+            ~/.cargo/bin/
+            ~/.cargo/registry/index/
+            ~/.cargo/registry/cache/
+            ~/.cargo/git/db/
+            target/
+          key: ${{ runner.os }}-cargo-${{ hashFiles('**/Cargo.lock') }}
+          
+      - name: 🏗️ Build
+        run: cargo build --workspace --verbose
+        
+      - name: 🧪 Unit Tests
+        run: cargo test --workspace --verbose
+        
+      - name: 🔬 Integration Tests
+        run: cargo test --workspace --test '*' --verbose
+
+  # 📊 Coverage
+  coverage:
+    name: 📊 Coverage
+    runs-on: ubuntu-latest
+    if: github.event_name == 'pull_request'
+    steps:
+      - name: 📥 Checkout
+        uses: actions/checkout@v4
+        
+      - name: 🦀 Install Rust
+        uses: dtolnay/rust-toolchain@stable
+        
+      - name: 📊 Install Tarpaulin
+        run: cargo install cargo-tarpaulin
+        
+      - name: 🧪 Generate Coverage
+        run: cargo tarpaulin --verbose --all-features --workspace --timeout 120 --out xml
+        
+      - name: 📤 Upload Coverage
+        uses: codecov/codecov-action@v3
+        with:
+          files: cobertura.xml
+          fail_ci_if_error: false
+
+  # 🚀 Build Release
+  build-release:
+    name: 🚀 Build Release
+    runs-on: ubuntu-latest
+    if: github.ref == 'refs/heads/main'
+    needs: [quality, test]
+    steps:
+      - name: 📥 Checkout
+        uses: actions/checkout@v4
+        
+      - name: 🦀 Install Rust
+        uses: dtolnay/rust-toolchain@stable
+        
+      - name: 🏗️ Build Release
+        run: cargo build --release --workspace
+        
+      - name: 📦 Package Artifacts
+        run: |
+          mkdir -p artifacts
+          cp target/release/aevum-bond artifacts/
+          cp README.md artifacts/
+          cp -r docs artifacts/
+          
+      - name: 📤 Upload Artifacts
+        uses: actions/upload-artifact@v3
+        with:
+          name: aevum-bond-release
+          path: artifacts/
+
+  # 📋 Summary
+  summary:
+    name: 📋 Build Summary
+    runs-on: ubuntu-latest
+    if: always()
+    needs: [quality, test, coverage]
+    steps:
+      - name: 📊 Report Status
+        run: |
+          echo "## 🤖 IA-Enhanced CI/CD Results" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "### 📋 Job Status:" >> $GITHUB_STEP_SUMMARY
+          echo "- 🔧 Code Quality: ${{ needs.quality.result }}" >> $GITHUB_STEP_SUMMARY
+          echo "- 🧪 Tests: ${{ needs.test.result }}" >> $GITHUB_STEP_SUMMARY
+          echo "- 📊 Coverage: ${{ needs.coverage.result }}" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "### 🎯 Next Steps:" >> $GITHUB_STEP_SUMMARY
+          echo "- Review any failing checks above" >> $GITHUB_STEP_SUMMARY
+          echo "- Ensure all tests pass locally with \`cargo test --workspace\`" >> $GITHUB_STEP_SUMMARY
+          echo "- Run \`cargo clippy --workspace\` to check code quality" >> $GITHUB_STEP_SUMMARY

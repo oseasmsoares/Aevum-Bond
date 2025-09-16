@@ -1,0 +1,42 @@
+{
+    "version": "0.2.0",
+    "configurations": [
+        {
+            "name": "🦀 Debug Aevum & Bond",
+            "type": "lldb",
+            "request": "launch",
+            "program": "${workspaceFolder}/target/debug/aevum-bond",
+            "args": [],
+            "cwd": "${workspaceFolder}",
+            "sourceLanguages": [
+                "rust"
+            ],
+            "preLaunchTask": "🦀 Build All"
+        },
+        {
+            "name": "🧪 Debug Tests",
+            "type": "lldb",
+            "request": "launch",
+            "program": "${workspaceFolder}/target/debug/deps/aevum_bond-*",
+            "args": [],
+            "cwd": "${workspaceFolder}",
+            "sourceLanguages": [
+                "rust"
+            ]
+        },
+        {
+            "name": "🚀 Demo Mode",
+            "type": "lldb",
+            "request": "launch",
+            "program": "${workspaceFolder}/target/debug/aevum-bond",
+            "args": [
+                "--demo"
+            ],
+            "cwd": "${workspaceFolder}",
+            "sourceLanguages": [
+                "rust"
+            ],
+            "preLaunchTask": "🦀 Build All"
+        }
+    ]
+}

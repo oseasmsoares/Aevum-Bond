@@ -1,0 +1,22 @@
+{
+  "recommendations": [
+    // 🤖 IA & Copilot
+    "github.copilot",
+    "github.copilot-chat",
+    // 🦀 Rust Development
+    "rust-lang.rust-analyzer",
+    "tamasfe.even-better-toml",
+    "serayuzgur.crates",
+    "vadimcn.vscode-lldb",
+    // 🔧 Code Quality
+    "ms-vscode.vscode-json",
+    "redhat.vscode-yaml",
+    // 📋 Project Management  
+    "ms-vscode.vscode-github-issue-notebooks",
+    "github.vscode-pull-request-github",
+    "eamodio.gitlens",
+    // 🎨 UI/UX
+    "pkief.material-icon-theme",
+    "github.github-vscode-theme"
+  ]
+}

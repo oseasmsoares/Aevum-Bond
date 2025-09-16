@@ -1,0 +1,17 @@
+[package]
+name = "shared"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+serde = { version = "1.0", features = ["derive"] }
+serde_json = "1.0"
+sha3 = "0.10"
+hex = "0.4"
+chrono = { version = "0.4", features = ["serde"] }
+thiserror = "1.0"
+# Post-Quantum Cryptography - ML-DSA (CRYSTALS-Dilithium) support
+pqcrypto-dilithium = "0.5"
+pqcrypto-traits = "0.3"
+rand = "0.8"
+zeroize = { version = "1.7", features = ["derive"] }
