@@ -1,7 +1,140 @@
 use bond_core::*;
+use clap::{Args, Parser, Subcommand};
 use shared::{KeyPair, sign_transaction_hash, verify_transaction_signature};
+use tracing::{Level, info};
+use tracing_subscriber;
 
-fn main() -> shared::Result<()> {
+mod network;
+use network::{P2PConfig, P2PNode};
+
+#[derive(Parser)]
+#[command(name = "aevum-bond")]
+#[command(about = "Aevum & Bond - Post-Quantum Blockchain Node")]
+#[command(version = "0.3.0-sprint3")]
+struct Cli {
+    #[command(subcommand)]
+    command: Option<Commands>,
+}
+
+#[derive(Subcommand)]
+enum Commands {
+    /// Run Sprint 1 & 2 demonstration (blockchain + crypto)
+    Demo,
+    /// Start P2P network node (Sprint 3)
+    StartNode(StartNodeArgs),
+    /// Network information and status
+    Network(NetworkArgs),
+    /// Display version information
+    Version,
+}
+
+#[derive(Args)]
+struct StartNodeArgs {
+    /// Port to listen on (0 for random)
+    #[arg(short, long, default_value = "0")]
+    port: u16,
+
+    /// Log level (trace, debug, info, warn, error)
+    #[arg(long, default_value = "info")]
+    log_level: String,
+}
+
+#[derive(Args)]
+struct NetworkArgs {
+    #[command(subcommand)]
+    action: NetworkAction,
+}
+
+#[derive(Subcommand)]
+enum NetworkAction {
+    /// Show network status
+    Status,
+    /// List connected peers
+    Peers,
+}
+
+#[tokio::main]
+async fn main() -> shared::Result<()> {
+    let cli = Cli::parse();
+
+    match &cli.command {
+        Some(Commands::Demo) => demo_blockchain_and_crypto().await,
+        Some(Commands::StartNode(args)) => start_p2p_node(args).await,
+        Some(Commands::Network(args)) => handle_network_commands(args).await,
+        Some(Commands::Version) => {
+            show_version();
+            Ok(())
+        }
+        None => {
+            // Default: run demo
+            demo_blockchain_and_crypto().await
+        }
+    }
+}
+
+async fn start_p2p_node(args: &StartNodeArgs) -> shared::Result<()> {
+    // Configure logging
+    let level = match args.log_level.as_str() {
+        "trace" => Level::TRACE,
+        "debug" => Level::DEBUG,
+        "info" => Level::INFO,
+        "warn" => Level::WARN,
+        "error" => Level::ERROR,
+        _ => Level::INFO,
+    };
+
+    tracing_subscriber::fmt().with_max_level(level).init();
+
+    info!("🚀 Starting Aevum & Bond P2P Node - Sprint 3");
+
+    let config = P2PConfig {
+        port: args.port,
+        ..P2PConfig::default()
+    };
+
+    let mut node = P2PNode::new(config);
+    info!("🆔 Node ID: {}", node.node_id());
+
+    // Start the node
+    node.start().await?;
+    info!("✅ P2P Node started successfully");
+
+    // Keep running until interrupted
+    tokio::signal::ctrl_c()
+        .await
+        .expect("Failed to listen for ctrl-c");
+    info!("🛑 Shutting down node...");
+
+    Ok(())
+}
+
+async fn handle_network_commands(args: &NetworkArgs) -> shared::Result<()> {
+    match &args.action {
+        NetworkAction::Status => {
+            println!("🌐 Aevum & Bond Network Status");
+            println!("Sprint 3: P2P Implementation");
+            println!("Status: Development/Testing");
+        }
+        NetworkAction::Peers => {
+            println!("👥 Connected Peers");
+            println!("(Feature available when node is running)");
+        }
+    }
+    Ok(())
+}
+
+fn show_version() {
+    println!("🔗 Aevum & Bond v0.3.0-sprint3");
+    println!("Sprint 3: P2P Networking Implementation");
+    println!("Post-Quantum Blockchain with ML-DSA-65");
+    println!();
+    println!("Features:");
+    println!("  ✅ Sprint 1: Blockchain Foundation");
+    println!("  ✅ Sprint 2: Post-Quantum Cryptography");
+    println!("  🔄 Sprint 3: P2P Networking (In Progress)");
+}
+
+async fn demo_blockchain_and_crypto() -> shared::Result<()> {
     println!("🔗 Aevum & Bond - Sprint 1: Fundação do Núcleo");
     println!("================================================");
 

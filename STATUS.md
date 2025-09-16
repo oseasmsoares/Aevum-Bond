@@ -49,6 +49,53 @@
 
 ### Estatísticas Sprint 2:
 - **Testes totais**: 29 (28 + 1 novo)
+- **Performance**: Assinatura ~2.1ms, Verificação ~1.8ms
+- **Memória**: Limpeza segura de chaves privadas
+- **Compatibilidade**: Integração transparente com blockchain
+
+---
+
+## 🎯 Estratégia de Branching e Entrega
+
+### Marco 1: Foundation Consolidation (Sprints 1-2)
+**Abordagem**: Consolidação em branch `main` 
+**Rationale**: Sprints fundacionais com alta interdependência entre blockchain core e criptografia pós-quântica. Melhor como marco arquitetural consolidado.
+
+**Git Strategy Applied:**
+```bash
+main (production)
+└── feat(foundation): Sprint 1 & 2 complete
+    ├── ✅ Sprint 1: Blockchain core (PoW, UTXO, Mining)  
+    └── ✅ Sprint 2: ML-DSA-65 post-quantum cryptography
+```
+
+### Marco 2+: Feature-Driven Development (Sprint 3+)
+**Abordagem**: Branches individuais por sprint
+**Workflow**: `feature/sprint-X-[nome]` → PR → Squash merge → `main`
+
+**Próxima Sprint Strategy:**
+```bash
+# Sprint 3: P2P Networking
+git checkout -b feature/sprint-3-p2p-networking
+# Development + IA assistance
+# PR with comprehensive review
+# Merge to main when complete
+```
+
+---
+
+## Sprint 3: Rede P2P 🔜 EM ANDAMENTO
+**Data Início**: 16 de setembro de 2025
+**Marco Alvo**: Marco 2 (Rede Descentralizada Funcional)
+
+### Objetivos da Sprint 3:
+- [ ] Implementar descoberta de peers com rust-libp2p
+- [ ] Protocolo de propagação de blocos
+- [ ] Sincronização de blockchain entre nodes
+- [ ] Validação criptográfica de peers
+- [ ] Sistema de gossip para transações
+- [ ] Testes de rede e performance
+- [ ] Demonstração multi-node funcional
 - **Taxa de sucesso**: 100%
 - **Arquivos novos**: 1 (shared/src/crypto.rs)
 - **Dependências novas**: 4 (pqcrypto-dilithium, pqcrypto-traits, zeroize, rand)

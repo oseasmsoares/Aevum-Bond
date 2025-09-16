@@ -6,6 +6,30 @@ edition = "2024"
 [dependencies]
 bond-core = { path = "bond-core" }
 shared = { path = "shared" }
+
+# P2P Networking (Sprint 3)
+libp2p = { version = "0.53", features = [
+    "tcp",
+    "mdns",
+    "noise",
+    "yamux",
+    "gossipsub",
+    "request-response",
+    "identify",
+    "kad",
+    "tokio",
+] }
+libp2p-swarm-derive = "0.33"
+tokio = { version = "1.35", features = ["full"] }
+futures = "0.3"
+prost = "0.12"
+
+# CLI for node operations
+clap = { version = "4.4", features = ["derive"] }
+tracing = "0.1"
+tracing-subscriber = { version = "0.3", features = ["env-filter"] }
+
+# Existing dependencies
 serde = { version = "1.0", features = ["derive"] }
 serde_json = "1.0"
 sha3 = "0.10"

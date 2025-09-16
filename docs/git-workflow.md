@@ -21,14 +21,48 @@ Branch Types:
 
 ### **🎯 Current Branch Structure**
 ```bash
-# Status atual (Sprint 1 concluído):
-* main                    # ✅ Sprint 1 completo, production-ready
+# ✅ Estado atual (Foundation Complete):
+* main                    # Production: Sprint 1+2 consolidadas
   
-# Próximos branches (Sprint 2):
-feature/pqc-integration   # 🔜 ML-DSA implementation
-feature/pqc-keygen        # 🔜 Key generation
-feature/pqc-signing       # 🔜 Transaction signing
-feature/pqc-verification  # 🔜 Signature verification
+# 🔜 Próximas branches (Sprint 3+ Feature-Driven):
+feature/sprint-3-p2p-networking    # P2P implementation  
+feature/sprint-4-consensus         # Consensus algorithm
+feature/sprint-5-smart-contracts   # Smart contract VM
+feature/sprint-6-wallet            # Wallet integration
+# ... até Sprint 14
+```
+
+### **📊 Estratégia de Consolidação vs Feature Branches**
+
+#### **Marco 1 (Sprints 1-2): Foundation Consolidation ✅**
+**Rationale**: Foundation sprints com alta interdependência arquitetural
+```bash
+✅ Abordagem Utilizada:
+main ← feat(foundation): Sprint 1 & 2 complete
+├── Sprint 1: Blockchain core (PoW, UTXO, hashing)
+└── Sprint 2: ML-DSA-65 post-quantum cryptography
+
+🎯 Benefícios:
+- Arquitetura consolidada e testada
+- Interdependências resolvidas
+- Base sólida para features futuras
+- Histórico git limpo para foundation
+```
+
+#### **Marco 2+ (Sprint 3+): Feature-Driven Development 🔜**
+**Rationale**: Features independentes com review individual
+```bash
+🔜 Abordagem Futura:
+main ← feature/sprint-3-p2p-networking
+main ← feature/sprint-4-consensus  
+main ← feature/sprint-5-smart-contracts
+# etc...
+
+🎯 Benefícios:
+- Review focused em feature específica
+- Rollback granular se necessário  
+- Desenvolvimento paralelo possível
+- IA contribution tracking por feature
 ```
 
 ## 🔄 Workflow Detalhado
