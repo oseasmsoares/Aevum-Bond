@@ -92,18 +92,15 @@ async fn start_p2p_node(args: &StartNodeArgs) -> shared::Result<()> {
         ..P2PConfig::default()
     };
 
-    let mut node = P2PNode::new(config);
+    let mut node = P2PNode::new(config).await?;
     info!("🆔 Node ID: {}", node.node_id());
 
     // Start the node
     node.start().await?;
     info!("✅ P2P Node started successfully");
 
-    // Keep running until interrupted
-    tokio::signal::ctrl_c()
-        .await
-        .expect("Failed to listen for ctrl-c");
-    info!("🛑 Shutting down node...");
+    // Run the event loop (blocks until Ctrl+C)
+    node.run().await?;
 
     Ok(())
 }
