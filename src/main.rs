@@ -5,7 +5,7 @@ use tracing::{Level, info};
 use tracing_subscriber;
 
 mod network;
-use network::{P2PConfig, P2PNode};
+use network::{NodeMode, P2PConfig, P2PNode, SyncMode};
 
 #[derive(Parser)]
 #[command(name = "aevum-bond")]
@@ -34,9 +34,41 @@ struct StartNodeArgs {
     #[arg(short, long, default_value = "0")]
     port: u16,
 
+    /// Bootstrap nodes to connect to (IP:PORT)
+    #[arg(short, long)]
+    bootstrap: Vec<String>,
+
+    /// Node operation mode
+    #[arg(long, value_enum, default_value = "full")]
+    mode: NodeModeArg,
+
+    /// Number of mining threads (only for mining mode)
+    #[arg(long, default_value = "1")]
+    mining_threads: usize,
+
+    /// Target mining difficulty (only for mining mode)
+    #[arg(long, default_value = "20")]
+    difficulty: u32,
+
+    /// External IP address for bootstrap nodes
+    #[arg(long)]
+    external_ip: Option<String>,
+
     /// Log level (trace, debug, info, warn, error)
     #[arg(long, default_value = "info")]
     log_level: String,
+}
+
+#[derive(clap::ValueEnum, Clone, Debug)]
+enum NodeModeArg {
+    /// Full node - participates in all network activities
+    Full,
+    /// Mining node - focuses on block production
+    Mining,
+    /// Wallet node - lightweight, transaction-focused
+    Wallet,
+    /// Bootstrap node - helps with network discovery
+    Bootstrap,
 }
 
 #[derive(Args)]
@@ -86,14 +118,40 @@ async fn start_p2p_node(args: &StartNodeArgs) -> shared::Result<()> {
     tracing_subscriber::fmt().with_max_level(level).init();
 
     info!("🚀 Starting Aevum & Bond P2P Node - Sprint 3");
+    info!("🎯 Mode: {:?}", args.mode);
+
+    // Create node mode from arguments
+    let node_mode = match args.mode {
+        NodeModeArg::Full => NodeMode::FullNode,
+        NodeModeArg::Mining => NodeMode::MiningNode {
+            mining_threads: args.mining_threads,
+            target_difficulty: args.difficulty,
+        },
+        NodeModeArg::Wallet => NodeMode::WalletNode {
+            sync_mode: SyncMode::SPV,
+        },
+        NodeModeArg::Bootstrap => NodeMode::BootstrapNode,
+    };
+
+    // Create a blockchain instance for the node
+    let genesis_script = b"Genesis Block - Aevum & Bond P2P Node".to_vec();
+    let blockchain = Blockchain::new(Default::default(), genesis_script)?;
+    info!("⛓️ Blockchain initialized with genesis block");
 
     let config = P2PConfig {
         port: args.port,
+        bootstrap_nodes: args.bootstrap.clone(),
+        node_mode,
+        external_addr: args.external_ip.clone(),
         ..P2PConfig::default()
     };
 
     let mut node = P2PNode::new(config).await?;
     info!("🆔 Node ID: {}", node.node_id());
+
+    // Attach blockchain to the P2P node
+    node.set_blockchain(blockchain);
+    info!("🔗 Blockchain attached to P2P node");
 
     // Start the node
     node.start().await?;
