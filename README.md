@@ -135,16 +135,25 @@ let result = blockchain.mine_next_block(&miner, vec![tx])?;
 blockchain.add_block(result.block)?;
 ```
 
-### 🚀 Próximo Sprint
+### 🚀 Sprints Concluídos e Próximos
 
-O **Sprint 2** implementará:
-- Integração da criptografia pós-quântica ML-DSA (CRYSTALS-Dilithium)
-- Substituição das assinaturas placeholder por PQC real
-- Gestão segura de chaves pública/privada
-- Validação criptográfica completa
+#### ✅ Sprint 2: Segurança Pós-Quântica - CONCLUÍDO
+- Integração da criptografia pós-quântica ML-DSA-65 (CRYSTALS-Dilithium)
+- Substituição das assinaturas placeholder por PQC real (NIST FIPS 204)
+- Gestão segura de chaves pública/privada com zeroização automática
+- Validação criptográfica completa com resistência quântica
+
+#### 🚀 Próximo Sprint (Sprint 3): Fundação da Rede P2P
+- Implementação da camada de rede P2P com rust-libp2p
+- Comunicação entre nós para propagação de transações e blocos
+- Sincronização de blockchain entre múltiplos nós
+- Múltiplos modos de nós (completo, mineração, carteira, bootstrap)
 
 ---
 
-**Marco Atingido**: ✅ **Marco 1 - Blockchain Local Funcional**
+**Marcos Atingidos**:
+- ✅ **Marco 1 - Blockchain Local Funcional** (14 de setembro de 2025)
+- ✅ **Marco 2 - Segurança Pós-Quântica** (16 de setembro de 2025)
+- 🔄 **Em andamento: Marco 3 - Rede P2P Funcional**
 
-*Data de Conclusão*: 14 de setembro de 2025
+*Última atualização*: 16 de setembro de 2025
