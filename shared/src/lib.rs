@@ -9,5 +9,9 @@ pub use crypto::{
 };
 pub use error::BlockchainError;
 pub use hash::Hash256;
+pub use types::{
+    Amount, BlockHeight, BlockId, BlockchainStats, InputIndex, NetworkType, NodeConfig, OutPoint,
+    OutputIndex, PeerInfo, PublicKeyHex, SignatureHex, Timestamp, TxId,
+};
 
 pub type Result<T> = std::result::Result<T, BlockchainError>;

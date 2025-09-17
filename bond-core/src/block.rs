@@ -1,11 +1,11 @@
-use serde::{Deserialize, Serialize};
-use chrono::{DateTime, Utc};
-use shared::{Hash256, BlockchainError, Result};
 use crate::transaction::Transaction;
 use crate::utxo::{Utxo, UtxoSet};
+use chrono::{DateTime, Utc};
+use serde::{Deserialize, Serialize};
+use shared::{BlockchainError, Hash256, Result};
 
 /// Cabeçalho do bloco
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct BlockHeader {
     /// Versão do bloco
     pub version: u32,
@@ -23,7 +23,8 @@ pub struct BlockHeader {
 
 impl BlockHeader {
     /// Cria um novo cabeçalho de bloco
-    pub fn new(
+    #[must_use]
+    pub const fn new(
         version: u32,
         previous_hash: Hash256,
         merkle_root: Hash256,
@@ -42,6 +43,10 @@ impl BlockHeader {
     }
 
     /// Calcula o hash do cabeçalho do bloco
+    ///
+    /// # Errors
+    ///
+    /// Retorna erro se a serialização falhar
     pub fn hash(&self) -> Result<Hash256> {
         let serialized = serde_json::to_vec(self)
             .map_err(|e| BlockchainError::SerializationError(e.to_string()))?;
@@ -49,6 +54,10 @@ impl BlockHeader {
     }
 
     /// Verifica se o hash do cabeçalho atende à dificuldade
+    ///
+    /// # Errors
+    ///
+    /// Retorna erro se o cálculo do hash falhar
     pub fn meets_difficulty(&self) -> Result<bool> {
         let hash = self.hash()?;
         Ok(hash.meets_difficulty(self.difficulty))
@@ -66,7 +75,8 @@ pub struct Block {
 
 impl Block {
     /// Cria um novo bloco
-    pub fn new(header: BlockHeader, transactions: Vec<Transaction>) -> Self {
+    #[must_use]
+    pub const fn new(header: BlockHeader, transactions: Vec<Transaction>) -> Self {
         Self {
             header,
             transactions,
@@ -74,10 +84,14 @@ impl Block {
     }
 
     /// Cria o bloco gênese (primeiro bloco da blockchain)
+    ///
+    /// # Errors
+    ///
+    /// Retorna erro se a mineração ou cálculo do merkle root falharem
     pub fn genesis(genesis_reward: u64, genesis_script: Vec<u8>) -> Result<Self> {
         let coinbase = Transaction::coinbase(0, genesis_reward, genesis_script);
         let merkle_root = calculate_merkle_root(std::slice::from_ref(&coinbase))?;
-        
+
         let mut header = BlockHeader::new(
             1,
             Hash256::zero(), // Bloco gênese não tem antecessor
@@ -100,48 +114,73 @@ impl Block {
     }
 
     /// Obter o hash do bloco
+    ///
+    /// # Errors
+    ///
+    /// Retorna erro se o cálculo do hash do cabeçalho falhar
     pub fn hash(&self) -> Result<Hash256> {
         self.header.hash()
     }
 
     /// Obtém a altura do bloco (extraída da transação coinbase)
+    ///
+    /// # Errors
+    ///
+    /// Retorna erro se não houver transação coinbase válida ou se a altura não puder ser decodificada
     pub fn height(&self) -> Result<u64> {
         if self.transactions.is_empty() || !self.transactions[0].is_coinbase() {
-            return Err(BlockchainError::InvalidBlock("Missing coinbase transaction".to_string()));
+            return Err(BlockchainError::InvalidBlock(
+                "Missing coinbase transaction".to_string(),
+            ));
         }
 
         let coinbase = &self.transactions[0];
         if coinbase.inputs.is_empty() {
-            return Err(BlockchainError::InvalidBlock("Invalid coinbase transaction".to_string()));
+            return Err(BlockchainError::InvalidBlock(
+                "Invalid coinbase transaction".to_string(),
+            ));
         }
 
         let script_sig = &coinbase.inputs[0].script_sig;
         if script_sig.len() < 8 {
-            return Err(BlockchainError::InvalidBlock("Invalid coinbase height encoding".to_string()));
+            return Err(BlockchainError::InvalidBlock(
+                "Invalid coinbase height encoding".to_string(),
+            ));
         }
 
-        let height_bytes: [u8; 8] = script_sig[0..8].try_into()
+        let height_bytes: [u8; 8] = script_sig[0..8]
+            .try_into()
             .map_err(|_| BlockchainError::InvalidBlock("Invalid height bytes".to_string()))?;
-        
+
         Ok(u64::from_le_bytes(height_bytes))
     }
 
     /// Validação básica do bloco
+    ///
+    /// # Errors
+    ///
+    /// Retorna erro se o bloco não atender aos critérios de validação básica
     pub fn validate_basic(&self) -> Result<()> {
         // Verificar se tem pelo menos uma transação (coinbase)
         if self.transactions.is_empty() {
-            return Err(BlockchainError::InvalidBlock("Block has no transactions".to_string()));
+            return Err(BlockchainError::InvalidBlock(
+                "Block has no transactions".to_string(),
+            ));
         }
 
         // Verificar se a primeira transação é coinbase
         if !self.transactions[0].is_coinbase() {
-            return Err(BlockchainError::InvalidBlock("First transaction is not coinbase".to_string()));
+            return Err(BlockchainError::InvalidBlock(
+                "First transaction is not coinbase".to_string(),
+            ));
         }
 
         // Verificar se não há outras transações coinbase
         for (i, tx) in self.transactions.iter().enumerate() {
             if i > 0 && tx.is_coinbase() {
-                return Err(BlockchainError::InvalidBlock("Multiple coinbase transactions".to_string()));
+                return Err(BlockchainError::InvalidBlock(
+                    "Multiple coinbase transactions".to_string(),
+                ));
             }
         }
 
@@ -153,7 +192,9 @@ impl Block {
         // Verificar merkle root
         let calculated_merkle = calculate_merkle_root(&self.transactions)?;
         if calculated_merkle != self.header.merkle_root {
-            return Err(BlockchainError::InvalidBlock("Invalid merkle root".to_string()));
+            return Err(BlockchainError::InvalidBlock(
+                "Invalid merkle root".to_string(),
+            ));
         }
 
         // Verificar se atende à dificuldade
@@ -165,6 +206,10 @@ impl Block {
     }
 
     /// Aplica o bloco ao conjunto de UTXOs
+    ///
+    /// # Errors
+    ///
+    /// Retorna erro se alguma UTXO requerida não for encontrada ou se ocorrer erro na aplicação
     pub fn apply_to_utxo_set(&self, utxo_set: &mut UtxoSet) -> Result<()> {
         let block_height = self.height()?;
 
@@ -185,7 +230,9 @@ impl Block {
             for (output_index, output) in tx.outputs.iter().enumerate() {
                 let utxo = Utxo::new(
                     txid,
-                    output_index as u32,
+                    output_index.try_into().map_err(|_| {
+                        BlockchainError::InvalidBlock("Output index overflow".to_string())
+                    })?,
                     output.value,
                     output.script_pubkey.clone(),
                     block_height,
@@ -198,23 +245,32 @@ impl Block {
     }
 
     /// Calcula o tamanho do bloco em bytes
+    #[must_use]
     pub fn size(&self) -> usize {
         // Estimativa simplificada
-        let header_size = 200; // Estimativa para cabeçalho serializado
-        let transactions_size: usize = self.transactions.iter()
-            .map(|tx| tx.estimated_size())
+        const HEADER_SIZE: usize = 200; // Estimativa para cabeçalho serializado
+        let transactions_size: usize = self
+            .transactions
+            .iter()
+            .map(Transaction::estimated_size)
             .sum();
-        
-        header_size + transactions_size
+
+        HEADER_SIZE + transactions_size
     }
 
     /// Verifica se o bloco excede o tamanho máximo (4MB)
+    #[must_use]
     pub fn exceeds_max_size(&self) -> bool {
-        self.size() > 4_000_000 // 4MB
+        const MAX_BLOCK_SIZE: usize = 4_000_000; // 4MB
+        self.size() > MAX_BLOCK_SIZE
     }
 }
 
 /// Calcula a merkle root de uma lista de transações
+///
+/// # Errors
+///
+/// Retorna erro se o cálculo do hash das transações falhar
 pub fn calculate_merkle_root(transactions: &[Transaction]) -> Result<Hash256> {
     if transactions.is_empty() {
         return Ok(Hash256::zero());
@@ -222,7 +278,7 @@ pub fn calculate_merkle_root(transactions: &[Transaction]) -> Result<Hash256> {
 
     let mut hashes: Vec<Hash256> = transactions
         .iter()
-        .map(|tx| tx.hash())
+        .map(Transaction::hash)
         .collect::<Result<Vec<_>>>()?;
 
     // Se há apenas uma transação, retorna seu hash
@@ -233,24 +289,23 @@ pub fn calculate_merkle_root(transactions: &[Transaction]) -> Result<Hash256> {
     // Construir árvore merkle
     while hashes.len() > 1 {
         let mut next_level = Vec::new();
-        
+
         for chunk in hashes.chunks(2) {
-            let combined = if chunk.len() == 2 {
+            let mut data = Vec::new();
+            data.extend_from_slice(chunk[0].as_bytes());
+
+            if chunk.len() == 2 {
                 // Combinar dois hashes
-                let mut data = Vec::new();
-                data.extend_from_slice(chunk[0].as_bytes());
                 data.extend_from_slice(chunk[1].as_bytes());
-                Hash256::keccak256(&data)
             } else {
                 // Hash ímpar - combina consigo mesmo
-                let mut data = Vec::new();
                 data.extend_from_slice(chunk[0].as_bytes());
-                data.extend_from_slice(chunk[0].as_bytes());
-                Hash256::keccak256(&data)
-            };
+            }
+
+            let combined = Hash256::keccak256(&data);
             next_level.push(combined);
         }
-        
+
         hashes = next_level;
     }
 
@@ -264,21 +319,24 @@ mod tests {
     #[test]
     fn test_genesis_block_creation() {
         let genesis = Block::genesis(5000, vec![1, 2, 3]).unwrap();
-        
+
         assert_eq!(genesis.transactions.len(), 1);
         assert!(genesis.transactions[0].is_coinbase());
         assert_eq!(genesis.height().unwrap(), 0);
-        
+
         // Mostrar o erro específico se a validação falhar
         match genesis.validate_basic() {
-            Ok(_) => (),
+            Ok(()) => (),
             Err(e) => {
-                println!("Erro na validação do bloco gênese: {:?}", e);
+                println!("Erro na validação do bloco gênese: {e:?}");
                 let hash = genesis.hash().unwrap();
-                println!("Hash do bloco: {}", hash);
+                println!("Hash do bloco: {hash}");
                 println!("Zeros iniciais: {}", hash.leading_zeros());
                 println!("Dificuldade: {}", genesis.header.difficulty);
-                println!("Atende dificuldade: {}", hash.meets_difficulty(genesis.header.difficulty));
+                println!(
+                    "Atende dificuldade: {}",
+                    hash.meets_difficulty(genesis.header.difficulty)
+                );
                 panic!("Validação do bloco gênese falhou");
             }
         }
@@ -288,7 +346,7 @@ mod tests {
     fn test_block_hash() {
         let genesis = Block::genesis(5000, vec![1, 2, 3]).unwrap();
         let hash = genesis.hash().unwrap();
-        
+
         // Hash deve ser determinístico
         let hash2 = genesis.hash().unwrap();
         assert_eq!(hash, hash2);
@@ -298,10 +356,10 @@ mod tests {
     fn test_merkle_root_calculation() {
         let tx1 = Transaction::coinbase(0, 5000, vec![1, 2, 3]);
         let tx2 = Transaction::coinbase(1, 5000, vec![4, 5, 6]);
-        
-        let single_tx_root = calculate_merkle_root(&[tx1.clone()]).unwrap();
-        let double_tx_root = calculate_merkle_root(&[tx1.clone(), tx2.clone()]).unwrap();
-        
+
+        let single_tx_root = calculate_merkle_root(std::slice::from_ref(&tx1)).unwrap();
+        let double_tx_root = calculate_merkle_root(&[tx1, tx2]).unwrap();
+
         assert_ne!(single_tx_root, double_tx_root);
         assert_ne!(single_tx_root, Hash256::zero());
     }
@@ -310,21 +368,21 @@ mod tests {
     fn test_utxo_set_application() {
         let mut utxo_set = UtxoSet::new();
         let genesis = Block::genesis(5000, vec![1, 2, 3]).unwrap();
-        
+
         // Aplicar bloco gênese
         genesis.apply_to_utxo_set(&mut utxo_set).unwrap();
-        
+
         assert_eq!(utxo_set.len(), 1);
-        assert_eq!(utxo_set.get_balance_for_script(&vec![1, 2, 3]), 5000);
+        assert_eq!(utxo_set.get_balance_for_script(&[1, 2, 3]), 5000);
     }
 
     #[test]
     fn test_block_size_limits() {
         let genesis = Block::genesis(5000, vec![1, 2, 3]).unwrap();
-        
+
         // Bloco gênese não deve exceder tamanho máximo
         assert!(!genesis.exceeds_max_size());
-        
+
         // Verificar que o tamanho é razoável
         assert!(genesis.size() > 0);
         assert!(genesis.size() < 1000); // Deve ser pequeno para um bloco simples

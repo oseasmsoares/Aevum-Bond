@@ -2,6 +2,13 @@
 name = "bond-core"
 version = "0.1.0"
 edition = "2021"
+description = "Core blockchain primitives for Bond - UTXO-based blockchain with mining and consensus"
+license = "MIT"
+repository = "https://github.com/oseasmsoares/Aevum-Bond"
+readme = "../README.md"
+keywords = ["blockchain", "utxo", "mining", "consensus", "pow"]
+categories = ["cryptography", "data-structures", "algorithms"]
+authors = ["Aevum Development Team"]
 
 [dependencies]
 shared = { path = "../shared" }

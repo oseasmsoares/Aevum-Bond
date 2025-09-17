@@ -1,10 +1,10 @@
-use std::sync::{Arc, Mutex};
-use std::sync::atomic::{AtomicBool, Ordering};
-use std::thread;
-use chrono::Utc;
-use shared::{Hash256, BlockchainError, Result};
-use crate::block::{Block, BlockHeader, calculate_merkle_root};
+use crate::block::{calculate_merkle_root, Block, BlockHeader};
 use crate::transaction::Transaction;
+use chrono::Utc;
+use shared::{BlockchainError, Hash256, Result};
+use std::sync::atomic::{AtomicBool, Ordering};
+use std::sync::{Arc, Mutex};
+use std::thread;
 
 /// Configuração do minerador
 #[derive(Debug, Clone)]
@@ -44,6 +44,7 @@ pub struct Miner {
 
 impl Miner {
     /// Cria um novo minerador
+    #[must_use]
     pub fn new(config: MinerConfig) -> Self {
         Self {
             config,
@@ -52,6 +53,10 @@ impl Miner {
     }
 
     /// Minera um bloco
+    ///
+    /// # Errors
+    ///
+    /// Retorna erro se a mineração falhar ou se não conseguir calcular o merkle root
     pub fn mine_block(
         &self,
         previous_hash: Hash256,
@@ -59,10 +64,20 @@ impl Miner {
         block_height: u64,
         reward: u64,
     ) -> Result<MiningResult> {
-        self.mine_block_with_difficulty(previous_hash, transactions, block_height, reward, self.config.difficulty)
+        self.mine_block_with_difficulty(
+            previous_hash,
+            transactions,
+            block_height,
+            reward,
+            self.config.difficulty,
+        )
     }
 
     /// Minera um bloco com dificuldade específica
+    ///
+    /// # Errors
+    ///
+    /// Retorna erro se a mineração falhar ou se não conseguir calcular o merkle root
     pub fn mine_block_with_difficulty(
         &self,
         previous_hash: Hash256,
@@ -72,8 +87,9 @@ impl Miner {
         difficulty: u32,
     ) -> Result<MiningResult> {
         // Criar transação coinbase
-        let coinbase = Transaction::coinbase(block_height, reward, self.config.reward_script.clone());
-        
+        let coinbase =
+            Transaction::coinbase(block_height, reward, self.config.reward_script.clone());
+
         // Combinar transações (coinbase + outras)
         let mut all_transactions = vec![coinbase];
         all_transactions.extend(transactions);
@@ -88,18 +104,18 @@ impl Miner {
             merkle_root,
             Utc::now(),
             difficulty, // Usar dificuldade fornecida
-            0, // nonce será incrementado durante a mineração
+            0,          // nonce será incrementado durante a mineração
         );
 
         // Minerar com múltiplas threads
-        self.mine_header_parallel(header, all_transactions)
+        self.mine_header_parallel(&header, &all_transactions)
     }
 
     /// Mineração paralela do cabeçalho
     fn mine_header_parallel(
         &self,
-        header: BlockHeader,
-        transactions: Vec<Transaction>,
+        header: &BlockHeader,
+        transactions: &[Transaction],
     ) -> Result<MiningResult> {
         let is_mining = Arc::clone(&self.is_mining);
         is_mining.store(true, Ordering::SeqCst);
@@ -112,7 +128,7 @@ impl Miner {
 
         for thread_id in 0..self.config.threads {
             let header_clone = header.clone();
-            let transactions_clone = transactions.clone();
+            let transactions_clone = transactions.to_owned();
             let is_mining_clone = Arc::clone(&is_mining);
             let result_clone = Arc::clone(&result);
 
@@ -126,12 +142,12 @@ impl Miner {
             let handle = thread::spawn(move || {
                 Self::mine_header_range(
                     header_clone,
-                    transactions_clone,
+                    &transactions_clone,
                     start_nonce,
                     end_nonce,
-                    is_mining_clone,
-                    result_clone,
-                )
+                    &is_mining_clone,
+                    &result_clone,
+                );
             });
 
             handles.push(handle);
@@ -143,23 +159,27 @@ impl Miner {
         }
 
         // Extrair resultado
-        let result = result.lock().unwrap().take()
+        let result = result
+            .lock()
+            .unwrap()
+            .take()
             .ok_or(BlockchainError::NonceNotFound)?;
 
         Ok(result)
     }
 
     /// Minera um cabeçalho em um intervalo de nonce específico
+    #[allow(clippy::needless_pass_by_value)] // Arc types are cheap to clone
     fn mine_header_range(
         mut header: BlockHeader,
-        transactions: Vec<Transaction>,
+        transactions: &[Transaction],
         start_nonce: u64,
         end_nonce: u64,
-        is_mining: Arc<AtomicBool>,
-        result: Arc<Mutex<Option<MiningResult>>>,
+        is_mining: &Arc<AtomicBool>,
+        result: &Arc<Mutex<Option<MiningResult>>>,
     ) {
         let mut attempts = 0u64;
-        
+
         for nonce in start_nonce..end_nonce {
             // Verificar se outra thread já encontrou solução
             if !is_mining.load(Ordering::SeqCst) {
@@ -179,8 +199,8 @@ impl Miner {
                 if hash.meets_difficulty(header.difficulty) {
                     // Encontrou solução!
                     is_mining.store(false, Ordering::SeqCst);
-                    
-                    let block = Block::new(header.clone(), transactions.clone());
+
+                    let block = Block::new(header, transactions.to_owned());
                     let mining_result = MiningResult {
                         block,
                         hash,
@@ -206,11 +226,17 @@ impl Miner {
     }
 
     /// Verifica se está minerando
+    #[must_use]
     pub fn is_mining(&self) -> bool {
         self.is_mining.load(Ordering::SeqCst)
     }
 
     /// Estima a taxa de hash (hashes por segundo)
+    ///
+    /// # Errors
+    ///
+    /// Retorna erro se o cálculo do hash falhar
+    #[allow(clippy::cast_precision_loss)] // Conversão intencional para cálculo de taxa
     pub fn estimate_hashrate(&self, duration_secs: u64) -> Result<f64> {
         let start_time = std::time::Instant::now();
         let mut header = BlockHeader::new(
@@ -230,7 +256,9 @@ impl Miner {
         }
 
         let elapsed = start_time.elapsed().as_secs_f64();
-        Ok(attempts as f64 / elapsed)
+        #[allow(clippy::cast_precision_loss)] // Conversão necessária para cálculo
+        let attempts_f64 = attempts as f64;
+        Ok(attempts_f64 / elapsed)
     }
 }
 
@@ -245,14 +273,16 @@ pub struct DifficultyAdjuster {
 impl Default for DifficultyAdjuster {
     fn default() -> Self {
         Self {
-            target_block_time: 600, // 10 minutos
+            target_block_time: 600,  // 10 minutos
             adjustment_period: 2016, // ~2 semanas com blocos de 10 min
         }
     }
 }
 
 impl DifficultyAdjuster {
-    pub fn new(target_block_time: u64, adjustment_period: u64) -> Self {
+    /// Cria um novo ajustador de dificuldade
+    #[must_use]
+    pub const fn new(target_block_time: u64, adjustment_period: u64) -> Self {
         Self {
             target_block_time,
             adjustment_period,
@@ -260,22 +290,40 @@ impl DifficultyAdjuster {
     }
 
     /// Calcula a nova dificuldade baseada no histórico de blocos
+    ///
+    /// # Errors
+    ///
+    /// Retorna erro se os blocos não tiverem timestamps válidos
+    ///
+    /// # Panics
+    ///
+    /// Pode entrar em pânico se o slice de blocos estiver vazio (verificado antes)
+    #[allow(clippy::cast_possible_truncation)] // Conversões seguras para cálculos de dificuldade
+    #[allow(clippy::cast_sign_loss)] // Conversões seguras de duração
+    #[allow(clippy::cast_precision_loss)] // Conversões necessárias para cálculos
     pub fn calculate_new_difficulty(
         &self,
         current_difficulty: u32,
         blocks: &[Block],
     ) -> Result<u32> {
-        if blocks.len() < self.adjustment_period as usize {
+        let adjustment_period_usize = usize::try_from(self.adjustment_period).map_err(|_| {
+            BlockchainError::InvalidBlock("Adjustment period too large".to_string())
+        })?;
+
+        if blocks.len() < adjustment_period_usize {
             return Ok(current_difficulty); // Não ajustar ainda
         }
 
-        let recent_blocks = &blocks[blocks.len() - self.adjustment_period as usize..];
-        
+        let recent_blocks = &blocks[blocks.len() - adjustment_period_usize..];
+
         // Calcular tempo real entre o primeiro e último bloco
         let first_timestamp = recent_blocks.first().unwrap().header.timestamp;
         let last_timestamp = recent_blocks.last().unwrap().header.timestamp;
-        
-        let actual_time = (last_timestamp - first_timestamp).num_seconds() as u64;
+
+        let actual_time =
+            u64::try_from((last_timestamp - first_timestamp).num_seconds()).map_err(|_| {
+                BlockchainError::InvalidBlock("Invalid timestamp difference".to_string())
+            })?;
         let expected_time = self.target_block_time * (self.adjustment_period - 1);
 
         // Calcular fator de ajuste
@@ -287,22 +335,24 @@ impl DifficultyAdjuster {
         // Nova dificuldade (inversa do fator)
         let new_difficulty = if clamped_factor > 1.0 {
             // Blocos muito lentos - diminuir dificuldade
-            std::cmp::max(1, current_difficulty - (clamped_factor - 1.0) as u32)
+            let decrease = (clamped_factor - 1.0) as u32;
+            current_difficulty.saturating_sub(decrease).max(1)
         } else {
             // Blocos muito rápidos - aumentar dificuldade
-            current_difficulty + ((1.0 / clamped_factor) - 1.0) as u32
+            let increase = ((1.0 / clamped_factor) - 1.0) as u32;
+            current_difficulty.saturating_add(increase)
         };
 
         Ok(new_difficulty.min(32)) // Limitar dificuldade máxima
     }
 }
 
-// Adicionar dependência num_cpus ao Cargo.toml seria ideal, 
+// Adicionar dependência num_cpus ao Cargo.toml seria ideal,
 // mas por simplicidade, vamos usar uma implementação básica
 mod num_cpus {
     pub fn get() -> Option<usize> {
         std::thread::available_parallelism()
-            .map(|p| p.get())
+            .map(std::num::NonZero::get)
             .ok()
     }
 }
@@ -315,7 +365,7 @@ mod tests {
     fn test_miner_creation() {
         let config = MinerConfig::default();
         let miner = Miner::new(config);
-        
+
         assert!(!miner.is_mining());
     }
 
@@ -326,14 +376,16 @@ mod tests {
             threads: 1,
             difficulty: 1, // Dificuldade muito baixa para teste rápido
         };
-        
+
         let miner = Miner::new(config);
-        let result = miner.mine_block(
-            Hash256::zero(),
-            vec![], // Sem transações além da coinbase
-            0,      // Altura 0 (gênese)
-            5000,   // Recompensa
-        ).unwrap();
+        let result = miner
+            .mine_block(
+                Hash256::zero(),
+                vec![], // Sem transações além da coinbase
+                0,      // Altura 0 (gênese)
+                5000,   // Recompensa
+            )
+            .unwrap();
 
         assert!(result.block.validate_basic().is_ok());
         assert_eq!(result.block.transactions.len(), 1);
@@ -344,30 +396,23 @@ mod tests {
     #[test]
     fn test_difficulty_adjustment() {
         let adjuster = DifficultyAdjuster::new(600, 10); // 10 blocos para teste
-        
+
         // Criar blocos simulados
         let mut blocks = vec![];
         let mut timestamp = Utc::now();
-        
+
         for i in 0..10 {
             let coinbase = Transaction::coinbase(i, 5000, vec![1, 2, 3]);
-            let merkle_root = calculate_merkle_root(&[coinbase.clone()]).unwrap();
-            
-            let header = BlockHeader::new(
-                1,
-                Hash256::zero(),
-                merkle_root,
-                timestamp,
-                20,
-                0,
-            );
-            
+            let merkle_root = calculate_merkle_root(std::slice::from_ref(&coinbase)).unwrap();
+
+            let header = BlockHeader::new(1, Hash256::zero(), merkle_root, timestamp, 20, 0);
+
             blocks.push(Block::new(header, vec![coinbase]));
-            timestamp = timestamp + chrono::Duration::seconds(300); // Blocos de 5 min (muito rápido)
+            timestamp += chrono::Duration::seconds(300); // Blocos de 5 min (muito rápido)
         }
 
         let new_difficulty = adjuster.calculate_new_difficulty(20, &blocks).unwrap();
-        
+
         // Dificuldade deve aumentar pois blocos estão sendo minerados muito rapidamente
         assert!(new_difficulty > 20);
     }
@@ -379,11 +424,11 @@ mod tests {
             difficulty: 32, // Alta para não encontrar solução
             ..Default::default()
         };
-        
+
         let miner = Miner::new(config);
         let hashrate = miner.estimate_hashrate(1).unwrap(); // 1 segundo
-        
+
         assert!(hashrate > 0.0);
-        println!("Estimated hashrate: {:.2} H/s", hashrate);
+        println!("Estimated hashrate: {hashrate:.2} H/s");
     }
 }

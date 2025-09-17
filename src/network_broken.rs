@@ -1,21 +1,36 @@
+//! Sprint 3: P2P Networking Module
+//! Mock implementation for demonstration purposes
+
 use bond_core::{Block, Blockchain, Transaction};
 use rand::random;
 use serde::{Deserialize, Serialize};
 use shared::{BlockchainError, Result};
-use std::collections::HashMap;
-use std::time::Duration;
+use std::{collections::HashMap, time::Duration};
 use tracing::info;
 
-/// Different types of nodes in the network
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub enum NodeMode {
-    FullNode,
-    MiningNode {
-        mining_threads: usize,
-        target_difficulty: u32,
-    },
-    WalletNode,
-    BootstrapNode,
+/// P2P Network Configuration
+#[derive(Debug, Clone)]
+pub struct P2PConfig {
+    pub listen_addr: String,
+    pub port: u16,
+         i        info!("� P2P node shutdown complete");
+        Ok(())
+    }
+
+    /// Check if node is currently running
+    #[must_use] pub const fn is_running(&self) -> bool {ing down P2P node {}", self.local_peer_id);
+
+        self.peers.clear();
+        self.is_running = false;
+
+        info!("👋 P2P node shutdown complete");
+        Ok(())
+    }
+
+    /// Check if node is currently running
+    #[must_use] pub const fn is_running(&self) -> bool {
+        self.is_running
+    }
 }
 
 /// P2P Node configuration
@@ -30,21 +45,49 @@ pub struct P2PConfig {
     pub enable_mdns: bool,
     pub enable_kad_dht: bool,
     pub node_mode: NodeMode,
+    pub external_addr: Option<String>,
     pub network_id: String,
+}
+
+/// Different operational modes for nodes
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub enum NodeMode {
+    /// Full node - participates in all network activities
+    FullNode,
+    /// Mining node - focuses on block production
+    MiningNode {
+        mining_threads: usize,
+        target_difficulty: u32,
+    },
+    /// Wallet node - lightweight, transaction-focused
+    WalletNode { sync_mode: SyncMode },
+    /// Bootstrap node - helps with network discovery
+    BootstrapNode,
+}
+
+/// Synchronization modes for wallet nodes
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub enum SyncMode {
+    /// Full sync - download entire blockchain
+    Full,
+    /// Fast sync - download headers only
+    Fast,
+    /// SPV - simplified payment verification
+    SPV,
 }
 
 impl Default for P2PConfig {
     fn default() -> Self {
         Self {
-            port: 8333,
             listen_addr: "0.0.0.0".to_string(),
-            external_addr: None,
-            bootstrap_nodes: Vec::new(),
-            max_peers: 8,
-            connection_timeout: Duration::from_secs(5),
+            port: 0, // Random port by default
+            bootstrap_nodes: vec![],
+            max_peers: 50,
+            connection_timeout: Duration::from_secs(30),
             enable_mdns: true,
             enable_kad_dht: true,
             node_mode: NodeMode::FullNode,
+            external_addr: None,
             network_id: "aevum-bond-testnet".to_string(),
         }
     }
@@ -52,8 +95,7 @@ impl Default for P2PConfig {
 
 impl P2PConfig {
     /// Create config for mining node
-    #[must_use]
-    pub fn mining_node(port: u16, bootstrap_nodes: Vec<String>, threads: usize) -> Self {
+    #[must_use] pub fn mining_node(port: u16, bootstrap_nodes: Vec<String>, threads: usize) -> Self {
         Self {
             port,
             bootstrap_nodes,
@@ -66,19 +108,19 @@ impl P2PConfig {
     }
 
     /// Create config for wallet node
-    #[must_use]
-    pub fn wallet_node(bootstrap_nodes: Vec<String>) -> Self {
+    #[must_use] pub fn wallet_node(bootstrap_nodes: Vec<String>) -> Self {
         Self {
             bootstrap_nodes,
-            node_mode: NodeMode::WalletNode,
-            max_peers: 4,
+            node_mode: NodeMode::WalletNode {
+                sync_mode: SyncMode::SPV,
+            },
+            max_peers: 10, // Lighter for wallet
             ..Default::default()
         }
     }
 
     /// Create config for bootstrap node
-    #[must_use]
-    pub fn bootstrap_node(port: u16, external_addr: String) -> Self {
+    #[must_use] pub fn bootstrap_node(port: u16, external_addr: String) -> Self {
         Self {
             port,
             external_addr: Some(external_addr),
@@ -92,27 +134,52 @@ impl P2PConfig {
 /// Messages exchanged in the P2P network
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub enum NetworkMessage {
-    /// Request peer information
-    GetPeers,
-    /// Response with peer list
-    Peers(Vec<String>),
-    /// Announce new transaction
-    NewTransaction(Transaction),
-    /// Announce new block
-    NewBlock(Block),
-    /// Request block by height
-    GetBlock(u64),
-    /// Block response
-    Block(Block),
-    /// Status announcement
-    Status {
-        chain_height: u64,
-        best_hash: String,
+    /// Broadcast a new block to peers
+    BlockBroadcast(Block),
+    /// Request blocks from a specific height
+    BlockRequest { from_height: u64 },
+    /// Response with blocks
+    BlockResponse(Vec<Block>),
+    /// Broadcast a transaction to the mempool
+    TransactionBroadcast(Transaction),
+    /// Ping message for peer discovery
+    Ping {
         node_id: String,
+        timestamp: u64,
+        node_mode: NodeMode,
     },
+    /// Pong response to ping
+    Pong {
+        node_id: String,
+        timestamp: u64,
+        node_mode: NodeMode,
+    },
+    /// Blockchain sync request
+    SyncRequest { chain_height: u64 },
+    /// Blockchain sync response
+    SyncResponse { blocks: Vec<Block>, height: u64 },
+    /// Network status announcement
+    StatusAnnouncement {
+        node_id: String,
+        chain_height: u64,
+        peer_count: usize,
+        node_mode: NodeMode,
+        uptime: Duration,
+    },
+    /// Mining announcement
+    MiningAnnouncement {
+        miner_id: String,
+        block_hash: String,
+        height: u64,
+        difficulty: u32,
+    },
+    /// Peer list request (for bootstrap)
+    PeerListRequest,
+    /// Peer list response
+    PeerListResponse { peers: Vec<PeerInfo> },
 }
 
-/// Information about a peer
+/// Information about a peer in the network
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct PeerInfo {
     pub node_id: String,
@@ -122,18 +189,36 @@ pub struct PeerInfo {
     pub chain_height: u64,
 }
 
-/// Network status information
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct NetworkStatus {
-    pub node_id: String,
-    pub peer_count: usize,
-    pub peers: Vec<String>,
-    pub listen_addresses: Vec<String>,
-    pub node_mode: NodeMode,
-    pub chain_height: u64,
+/// Events generated by the P2P network
+#[derive(Debug)]
+pub enum P2PEvent {
+    /// New peer connected
+    PeerConnected(String),
+    /// Peer disconnected  
+    PeerDisconnected(String),
+    /// Message received from gossip
+    GossipMessage {
+        peer_id: String,
+        topic: String,
+        message: NetworkMessage,
+    },
+    /// Request received from a peer
+    RequestReceived {
+        peer_id: String,
+        request: NetworkMessage,
+    },
+    /// Response received from a peer
+    ResponseReceived {
+        peer_id: String,
+        response: NetworkMessage,
+    },
+    /// Network error occurred
+    NetworkError(String),
+    /// New peer discovered
+    PeerDiscovered(String),
 }
 
-/// Mock P2P Node implementation for testing
+/// P2P Node - mock implementation for Sprint 3 demo
 pub struct P2PNode {
     config: P2PConfig,
     local_peer_id: String,
@@ -144,15 +229,15 @@ pub struct P2PNode {
 
 impl P2PNode {
     /// Create a new mock P2P node
-    ///
+    /// 
     /// # Errors
-    ///
+    /// 
     /// Can return error during node setup
     pub fn new(config: P2PConfig) -> Result<Self> {
         // Generate a random node ID for this mock implementation
         let local_peer_id = format!("aevum-{}", random::<u32>());
 
-        info!("🆔 Created mock P2P node with ID: {}", local_peer_id);
+        info!("🆔 Created mock P2P node with ID: {local_peer_id}");
 
         Ok(Self {
             config,
@@ -164,14 +249,10 @@ impl P2PNode {
     }
 
     /// Start the P2P node
-    ///
+    /// 
     /// # Errors
-    ///
+    /// 
     /// Can return error during node startup
-    ///
-    /// # Panics
-    ///
-    /// May panic if system time is before `UNIX_EPOCH`
     pub fn start(&mut self) -> Result<()> {
         info!(
             "🚀 Starting mock P2P node {} on {}:{}",
@@ -180,7 +261,7 @@ impl P2PNode {
 
         // Simulate connecting to bootstrap nodes
         for bootstrap_addr in &self.config.bootstrap_nodes {
-            info!("🌐 [Mock] Connecting to bootstrap node: {}", bootstrap_addr);
+            info!("🌐 [Mock] Connecting to bootstrap node: {bootstrap_addr}");
             // Create a mock peer
             let peer_id = format!("mock-peer-{bootstrap_addr}");
             let peer_info = PeerInfo {
@@ -189,7 +270,7 @@ impl P2PNode {
                 node_mode: NodeMode::BootstrapNode,
                 last_seen: std::time::SystemTime::now()
                     .duration_since(std::time::UNIX_EPOCH)
-                    .unwrap()
+                    .unwrap_or_default()
                     .as_secs(),
                 chain_height: 0,
             };
@@ -208,11 +289,12 @@ impl P2PNode {
                     node_mode: NodeMode::FullNode,
                     last_seen: std::time::SystemTime::now()
                         .duration_since(std::time::UNIX_EPOCH)
-                        .unwrap()
+                        .unwrap_or_default()
                         .as_secs(),
                     chain_height: 0,
                 };
-                self.peers.insert(peer_id, peer_info);
+                self.peers.insert(peer_id.clone(), peer_info);
+                info!("🔍 [Mock] Discovered peer: {}", peer_id);
             }
         }
 
@@ -222,9 +304,9 @@ impl P2PNode {
     }
 
     /// Run the P2P node - in mock version, just simulate some network activity
-    ///
+    /// 
     /// # Errors
-    ///
+    /// 
     /// Returns error if node is not started or network issues occur
     pub fn run(&mut self) -> Result<()> {
         if !self.is_running {
@@ -237,15 +319,15 @@ impl P2PNode {
 
         // Simulate receiving status announcements from peers
         for (peer_id, peer) in &mut self.peers {
-            info!("📢 [Mock] Received status from peer {}", peer_id);
+            info!("📢 [Mock] Received status from peer {peer_id}");
             // Update peer info with random chain height
             let height = random::<u64>() % 10;
             peer.chain_height = height;
         }
 
-        // Simulate a block announcement
-        info!("📦 [Mock] Received new block announcement");
-        if self.blockchain.is_some() {
+        // Simulate a block broadcast
+        if let Some(ref _blockchain) = self.blockchain {
+            info!("📦 [Mock] Received block broadcast from peer-1");
             info!("✅ [Mock] Block validated and added to chain");
         }
 
@@ -253,6 +335,10 @@ impl P2PNode {
         info!("💸 [Mock] Received transaction broadcast");
         info!("✅ [Mock] Transaction added to mempool");
 
+        info!("⏳ [Mock] P2P node running. Press Ctrl+C to exit...");
+
+        // In a real implementation, we would have an event loop here
+        // For the mock version, we just simulate without waiting
         info!("⏳ [Mock] P2P node would run here. Simulating completion...");
 
         info!("👋 [Mock] P2P node stopping due to simulation end");
@@ -262,11 +348,11 @@ impl P2PNode {
     }
 
     /// Broadcast a transaction to all peers (mock)
-    ///
+    /// 
     /// # Errors
-    ///
+    /// 
     /// Returns error if node is not started or broadcast fails
-    pub fn broadcast_transaction(&self, tx: &Transaction) -> Result<()> {
+    pub fn broadcast_transaction(&self, tx: Transaction) -> Result<()> {
         if !self.is_running {
             return Err(BlockchainError::NetworkError(
                 "Node not started".to_string(),
@@ -274,8 +360,7 @@ impl P2PNode {
         }
 
         let tx_hash = tx
-            .hash()
-            .map_or_else(|_| "error".to_string(), |h| format!("{h:?}"));
+            .hash().map_or_else(|_| "error".to_string(), |h| format!("{h:?}"));
 
         info!(
             "📣 [Mock] Broadcasting transaction {} to {} peers",
@@ -291,11 +376,11 @@ impl P2PNode {
     }
 
     /// Broadcast a block to all peers (mock)
-    ///
+    /// 
     /// # Errors
-    ///
+    /// 
     /// Returns error if node is not started or broadcast fails
-    pub fn broadcast_block(&self, block: &Block) -> Result<()> {
+    pub fn broadcast_block(&self, block: Block) -> Result<()> {
         if !self.is_running {
             return Err(BlockchainError::NetworkError(
                 "Node not started".to_string(),
@@ -303,8 +388,7 @@ impl P2PNode {
         }
 
         let block_hash = block
-            .hash()
-            .map_or_else(|_| "error".to_string(), |h| format!("{h:?}"));
+            .hash().map_or_else(|_| "error".to_string(), |h| format!("{h:?}"));
 
         info!(
             "📣 [Mock] Broadcasting block {} to {} peers",
@@ -313,15 +397,14 @@ impl P2PNode {
         );
 
         for peer_id in self.peers.keys() {
-            info!("  → Sent to peer {}", peer_id);
+            info!("  → Sent to peer {peer_id}");
         }
 
         Ok(())
     }
 
     /// Get the local peer ID
-    #[must_use]
-    pub fn node_id(&self) -> String {
+    #[must_use] pub fn node_id(&self) -> String {
         self.local_peer_id.clone()
     }
 
@@ -332,17 +415,19 @@ impl P2PNode {
     }
 
     /// Get connected peers count
-    #[must_use]
-    pub fn connected_peers(&self) -> usize {
+    #[must_use] pub fn connected_peers(&self) -> usize {
         self.peers.len()
     }
 
     /// Get network status
-    #[must_use]
-    pub fn network_status(&self) -> NetworkStatus {
-        let chain_height = self.blockchain.as_ref().map_or(0, |bc| bc.stats().height);
+    #[must_use] pub fn network_status(&self) -> NetworkStatus {
+        let chain_height = self
+            .blockchain
+            .as_ref()
+            .map_or(0, |bc| bc.stats().height);
 
         NetworkStatus {
+            is_running: self.is_running,
             node_id: self.local_peer_id.clone(),
             peer_count: self.peers.len(),
             peers: self.peers.keys().cloned().collect(),
@@ -353,9 +438,9 @@ impl P2PNode {
     }
 
     /// Shutdown the node
-    ///
+    /// 
     /// # Errors
-    ///
+    /// 
     /// Returns error if shutdown process fails
     pub fn shutdown(&mut self) -> Result<()> {
         if !self.is_running {
@@ -365,8 +450,8 @@ impl P2PNode {
         info!("🛑 Shutting down P2P node {}", self.local_peer_id);
 
         // Simulate sending goodbye messages to peers
-        for peer_id in self.peers.keys() {
-            info!("👋 [Mock] Sending goodbye to peer {}", peer_id);
+        for (peer_id, _) in &self.peers {
+            info!("�� [Mock] Sending goodbye to peer {}", peer_id);
         }
 
         self.peers.clear();
@@ -376,18 +461,20 @@ impl P2PNode {
         Ok(())
     }
 
-    /// Check if node is currently running
-    #[must_use]
-    pub const fn is_running(&self) -> bool {
+    /// Check if node is running
+    pub fn is_running(&self) -> bool {
         self.is_running
     }
 }
 
-/// Mock Peer Implementation
-#[derive(Debug, Clone)]
-pub struct MockPeer {
-    pub id: String,
-    pub address: String,
+/// Network status information
+#[derive(Debug, Serialize, Deserialize)]
+pub struct NetworkStatus {
+    pub is_running: bool,
+    pub node_id: String,
+    pub peer_count: usize,
+    pub peers: Vec<String>,
+    pub listen_addresses: Vec<String>,
     pub node_mode: NodeMode,
     pub chain_height: u64,
 }

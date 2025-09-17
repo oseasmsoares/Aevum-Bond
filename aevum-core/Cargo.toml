@@ -2,6 +2,13 @@
 name = "aevum-core"
 version = "0.1.0"
 edition = "2021"
+description = "High-performance DPoS blockchain core for Aevum - Account-based model with smart contracts"
+license = "MIT"
+repository = "https://github.com/oseasmsoares/Aevum-Bond"
+readme = "../README.md"
+keywords = ["blockchain", "dpos", "smart-contracts", "account-model", "defi"]
+categories = ["cryptography", "network-programming", "algorithms"]
+authors = ["Aevum Development Team"]
 
 [dependencies]
 shared = { path = "../shared" }

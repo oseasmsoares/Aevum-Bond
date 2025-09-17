@@ -1,8 +1,8 @@
 use serde::{Deserialize, Serialize};
-use shared::{Hash256, BlockchainError, Result};
+use shared::{BlockchainError, Hash256, Result};
 
 /// Representa uma saída de transação não gasta (UTXO)
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct Utxo {
     /// Hash da transação que criou este UTXO
     pub txid: Hash256,
@@ -18,7 +18,14 @@ pub struct Utxo {
 
 impl Utxo {
     /// Cria um novo UTXO
-    pub fn new(txid: Hash256, vout: u32, value: u64, script: Vec<u8>, block_height: u64) -> Self {
+    #[must_use]
+    pub const fn new(
+        txid: Hash256,
+        vout: u32,
+        value: u64,
+        script: Vec<u8>,
+        block_height: u64,
+    ) -> Self {
         Self {
             txid,
             vout,
@@ -29,7 +36,8 @@ impl Utxo {
     }
 
     /// Obtém o identificador único do UTXO
-    pub fn outpoint(&self) -> OutPoint {
+    #[must_use]
+    pub const fn outpoint(&self) -> OutPoint {
         OutPoint {
             txid: self.txid,
             vout: self.vout,
@@ -38,7 +46,8 @@ impl Utxo {
 
     /// Verifica se o UTXO está maduro (pode ser gasto)
     /// UTXOs de coinbase precisam de 100 blocos para maturar
-    pub fn is_mature(&self, current_height: u64, is_coinbase: bool) -> bool {
+    #[must_use]
+    pub const fn is_mature(&self, current_height: u64, is_coinbase: bool) -> bool {
         if is_coinbase {
             current_height >= self.block_height + 100
         } else {
@@ -47,7 +56,7 @@ impl Utxo {
     }
 }
 
-/// Identificador único de um UTXO (OutPoint)
+/// Identificador único de um UTXO (`OutPoint`)
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
 pub struct OutPoint {
     pub txid: Hash256,
@@ -55,7 +64,9 @@ pub struct OutPoint {
 }
 
 impl OutPoint {
-    pub fn new(txid: Hash256, vout: u32) -> Self {
+    /// Cria um novo `OutPoint`
+    #[must_use]
+    pub const fn new(txid: Hash256, vout: u32) -> Self {
         Self { txid, vout }
     }
 }
@@ -68,6 +79,7 @@ pub struct UtxoSet {
 
 impl UtxoSet {
     /// Cria um novo conjunto vazio de UTXOs
+    #[must_use]
     pub fn new() -> Self {
         Self {
             utxos: std::collections::HashMap::new(),
@@ -86,16 +98,19 @@ impl UtxoSet {
     }
 
     /// Obtém um UTXO do conjunto
+    #[must_use]
     pub fn get_utxo(&self, outpoint: &OutPoint) -> Option<&Utxo> {
         self.utxos.get(outpoint)
     }
 
     /// Verifica se um UTXO existe
+    #[must_use]
     pub fn contains(&self, outpoint: &OutPoint) -> bool {
         self.utxos.contains_key(outpoint)
     }
 
     /// Obtém o valor total de UTXOs controlados por um script específico
+    #[must_use]
     pub fn get_balance_for_script(&self, script: &[u8]) -> u64 {
         self.utxos
             .values()
@@ -105,6 +120,10 @@ impl UtxoSet {
     }
 
     /// Encontra UTXOs suficientes para cobrir um valor específico
+    ///
+    /// # Errors
+    ///
+    /// Retorna erro se não houver UTXOs suficientes para o valor solicitado
     pub fn find_utxos_for_amount(&self, script: &[u8], amount: u64) -> Result<Vec<&Utxo>> {
         let mut selected_utxos = Vec::new();
         let mut total_value = 0u64;
@@ -112,9 +131,10 @@ impl UtxoSet {
         for utxo in self.utxos.values() {
             if utxo.script == script {
                 selected_utxos.push(utxo);
-                total_value = total_value.checked_add(utxo.value)
-                    .ok_or(BlockchainError::InvalidTransaction("Overflow in UTXO selection".to_string()))?;
-                
+                total_value = total_value.checked_add(utxo.value).ok_or_else(|| {
+                    BlockchainError::InvalidTransaction("Overflow in UTXO selection".to_string())
+                })?;
+
                 if total_value >= amount {
                     return Ok(selected_utxos);
                 }
@@ -129,11 +149,13 @@ impl UtxoSet {
     }
 
     /// Retorna o número total de UTXOs
+    #[must_use]
     pub fn len(&self) -> usize {
         self.utxos.len()
     }
 
     /// Verifica se o conjunto está vazio
+    #[must_use]
     pub fn is_empty(&self) -> bool {
         self.utxos.is_empty()
     }
@@ -153,7 +175,7 @@ mod tests {
     fn test_utxo_creation() {
         let txid = Hash256::zero();
         let utxo = Utxo::new(txid, 0, 5000, vec![1, 2, 3], 100);
-        
+
         assert_eq!(utxo.txid, txid);
         assert_eq!(utxo.vout, 0);
         assert_eq!(utxo.value, 5000);
@@ -163,13 +185,13 @@ mod tests {
     #[test]
     fn test_utxo_maturity() {
         let utxo = Utxo::new(Hash256::zero(), 0, 5000, vec![1, 2, 3], 100);
-        
+
         // UTXO regular sempre está maduro
         assert!(utxo.is_mature(101, false));
-        
+
         // UTXO de coinbase precisa de 100 blocos
-        assert!(!utxo.is_mature(150, true));  // Apenas 50 blocos se passaram
-        assert!(utxo.is_mature(200, true));   // 100 blocos se passaram
+        assert!(!utxo.is_mature(150, true)); // Apenas 50 blocos se passaram
+        assert!(utxo.is_mature(200, true)); // 100 blocos se passaram
     }
 
     #[test]

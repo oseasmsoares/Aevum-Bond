@@ -2,6 +2,13 @@
 name = "aevum-bond"
 version = "0.1.0"
 edition = "2024"
+description = "Blockchain pós-quântica de alta performance com arquitetura dual (UTXO + Account Model)"
+license = "MIT"
+repository = "https://github.com/oseasmsoares/Aevum-Bond"
+readme = "README.md"
+keywords = ["blockchain", "post-quantum", "cryptography", "p2p", "defi"]
+categories = ["cryptography", "network-programming", "blockchain"]
+authors = ["Aevum Development Team"]
 
 [dependencies]
 bond-core = { path = "bond-core" }
@@ -18,7 +25,7 @@ tracing = "0.1"
 tokio = { version = "1.28", features = ["full"] }
 
 # P2P Networking - libp2p
-libp2p = { version = "0.52.0", features = [
+libp2p = { version = "0.53.0", features = [
     "tokio",
     "dns",
     "gossipsub",
@@ -30,6 +37,7 @@ libp2p = { version = "0.52.0", features = [
     "identify",
     "ping",
     "kad",
+    "request-response",
 ] }
 futures = "0.3"
 async-std = { version = "1.12", features = ["attributes"] }

@@ -39,25 +39,35 @@ pub struct KeyPair {
 /// Assinatura digital pós-quântica
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Signature {
-    signature_data: Vec<u8>,
+    data: Vec<u8>,
     public_key: PublicKey,
     algorithm: SignatureAlgorithm,
     timestamp: DateTime<Utc>,
 }
 
 impl PublicKey {
+    /// Cria uma chave pública a partir de bytes
+    ///
+    /// # Errors
+    ///
+    /// Retorna erro se os bytes não representarem uma chave válida
+    #[allow(clippy::missing_const_for_fn)] // Vec::new() não é const
     pub fn from_bytes(bytes: Vec<u8>) -> Result<Self> {
-        Ok(PublicKey {
+        Ok(Self {
             key_data: bytes,
             algorithm: SignatureAlgorithm::MLDSA65,
         })
     }
 
+    /// Returns the raw bytes of the public key
+    #[must_use]
     pub fn as_bytes(&self) -> &[u8] {
         &self.key_data
     }
 
-    pub fn algorithm(&self) -> SignatureAlgorithm {
+    /// Returns the signature algorithm used by this key
+    #[must_use]
+    pub const fn algorithm(&self) -> SignatureAlgorithm {
         self.algorithm
     }
 
@@ -67,18 +77,28 @@ impl PublicKey {
 }
 
 impl PrivateKey {
+    /// Creates a `PrivateKey` from raw bytes
+    ///
+    /// # Errors
+    ///
+    /// Returns error if the bytes are invalid for the algorithm
+    #[allow(clippy::missing_const_for_fn)] // Vec operations not const
     pub fn from_bytes(bytes: Vec<u8>) -> Result<Self> {
-        Ok(PrivateKey {
+        Ok(Self {
             key_data: bytes,
             algorithm: SignatureAlgorithm::MLDSA65,
         })
     }
 
+    /// Returns the raw bytes of the private key
+    #[must_use]
     pub fn as_bytes(&self) -> &[u8] {
         &self.key_data
     }
 
-    pub fn algorithm(&self) -> SignatureAlgorithm {
+    /// Returns the signature algorithm used by this key
+    #[must_use]
+    pub const fn algorithm(&self) -> SignatureAlgorithm {
         self.algorithm
     }
 
@@ -88,24 +108,34 @@ impl PrivateKey {
 }
 
 impl KeyPair {
+    /// Generates a new keypair for ML-DSA-65
+    ///
+    /// # Errors
+    ///
+    /// Returns error if key generation fails
     pub fn generate() -> Result<Self> {
         let (public_key_bytes, secret_key_bytes) = dilithium5::keypair();
 
         let public_key = PublicKey::from_bytes(public_key_bytes.as_bytes().to_vec())?;
         let private_key = PrivateKey::from_bytes(secret_key_bytes.as_bytes().to_vec())?;
 
-        Ok(KeyPair {
+        Ok(Self {
             public_key,
             private_key,
         })
     }
 
+    /// Signs a message using the private key
+    ///
+    /// # Errors
+    ///
+    /// Returns error if signing fails
     pub fn sign(&self, message: &[u8]) -> Result<Signature> {
         let secret_key = self.private_key.to_pqc_secret_key();
         let signed_message = dilithium5::sign(message, &secret_key);
 
         Ok(Signature {
-            signature_data: signed_message.as_bytes().to_vec(),
+            data: signed_message.as_bytes().to_vec(),
             public_key: self.public_key.clone(),
             algorithm: SignatureAlgorithm::MLDSA65,
             timestamp: Utc::now(),
@@ -114,31 +144,43 @@ impl KeyPair {
 }
 
 impl Signature {
+    /// Verifies the signature against a message
+    ///
+    /// # Errors
+    ///
+    /// Returns error if verification fails
     pub fn verify(&self, message: &[u8]) -> Result<bool> {
         let public_key = self.public_key.to_pqc_public_key();
-        let signed_message = SignedMessage::from_bytes(&self.signature_data)
-            .map_err(|_| BlockchainError::InvalidSignature)?;
+        let signed_message =
+            SignedMessage::from_bytes(&self.data).map_err(|_| BlockchainError::InvalidSignature)?;
 
-        match dilithium5::open(&signed_message, &public_key) {
-            Ok(verified_message) => Ok(verified_message == message),
-            Err(_) => Ok(false),
-        }
+        dilithium5::open(&signed_message, &public_key).map_or(Ok(false), |verified_message| {
+            Ok(verified_message == message)
+        })
     }
 
-    pub fn public_key(&self) -> &PublicKey {
+    /// Returns the public key used for verification
+    #[must_use]
+    pub const fn public_key(&self) -> &PublicKey {
         &self.public_key
     }
 
-    pub fn algorithm(&self) -> SignatureAlgorithm {
+    /// Returns the signature algorithm
+    #[must_use]
+    pub const fn algorithm(&self) -> SignatureAlgorithm {
         self.algorithm
     }
 
-    pub fn timestamp(&self) -> DateTime<Utc> {
+    /// Returns the timestamp when the signature was created
+    #[must_use]
+    pub const fn timestamp(&self) -> DateTime<Utc> {
         self.timestamp
     }
 
-    pub fn size(&self) -> usize {
-        self.signature_data.len()
+    /// Returns the size in bytes of this signature
+    #[must_use]
+    pub const fn size(&self) -> usize {
+        self.data.len()
     }
 }
 
@@ -154,29 +196,43 @@ impl Drop for PrivateKey {
     }
 }
 
-/// Funções utilitárias para assinatura de transações
+/// Signs a transaction hash with the given keypair
+///
+/// # Errors
+///
+/// Returns error if signing fails
 pub fn sign_transaction_hash(tx_hash: &Hash256, keypair: &KeyPair) -> Result<Signature> {
     keypair.sign(tx_hash.as_bytes())
 }
 
-/// Verifica uma assinatura contra um hash de transação
+/// Verifies a signature against a transaction hash
+///
+/// # Errors
+///
+/// Returns error if verification fails
 pub fn verify_transaction_signature(tx_hash: &Hash256, signature: &Signature) -> Result<bool> {
     signature.verify(tx_hash.as_bytes())
 }
 
-/// Cria uma chave pública a partir de bytes (para deserialização)
+/// Creates a public key from raw bytes
+///
+/// # Errors
+///
+/// Returns error if the bytes are invalid
 pub fn public_key_from_bytes(bytes: &[u8]) -> Result<PublicKey> {
     PublicKey::from_bytes(bytes.to_vec())
 }
 
-/// Cria uma assinatura a partir de bytes (para deserialização)
-pub fn signature_from_bytes(
+/// Creates a signature from raw components
+#[allow(clippy::missing_const_for_fn)] // DateTime operations not const
+#[must_use]
+pub const fn signature_from_bytes(
     signature_data: Vec<u8>,
     public_key: PublicKey,
     timestamp: DateTime<Utc>,
 ) -> Signature {
     Signature {
-        signature_data,
+        data: signature_data,
         public_key,
         algorithm: SignatureAlgorithm::MLDSA65,
         timestamp,
