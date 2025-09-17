@@ -1,6 +1,7 @@
 pub mod crypto;
 pub mod error;
 pub mod hash;
+pub mod types;
 
 pub use crypto::{
     public_key_from_bytes, sign_transaction_hash, signature_from_bytes,

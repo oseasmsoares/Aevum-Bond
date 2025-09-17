@@ -38,4 +38,7 @@ pub enum BlockchainError {
 
     #[error("Erro de I/O: {0}")]
     IoError(String),
+    
+    #[error("Erro de rede: {0}")]
+    NetworkError(String),
 }
