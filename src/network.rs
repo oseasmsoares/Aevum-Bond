@@ -1,14 +1,16 @@
 //! Sprint 3: P2P Networking Module
 //! Mock implementation for demonstration purposes
 
+#![allow(clippy::for_kv_map)]
+
 use bond_core::{Block, Blockchain, Transaction};
 use serde::{Deserialize, Serialize};
 use shared::{BlockchainError, Result};
 use std::{
-    collections::{HashMap, HashSet},
+    collections::HashMap,
     time::Duration,
 };
-use tracing::{debug, error, info, warn};
+use tracing::info;
 
 /// P2P Network Configuration
 #[derive(Debug, Clone)]

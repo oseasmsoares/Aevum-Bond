@@ -76,7 +76,7 @@ impl Block {
     /// Cria o bloco gênese (primeiro bloco da blockchain)
     pub fn genesis(genesis_reward: u64, genesis_script: Vec<u8>) -> Result<Self> {
         let coinbase = Transaction::coinbase(0, genesis_reward, genesis_script);
-        let merkle_root = calculate_merkle_root(&[coinbase.clone()])?;
+        let merkle_root = calculate_merkle_root(std::slice::from_ref(&coinbase))?;
         
         let mut header = BlockHeader::new(
             1,

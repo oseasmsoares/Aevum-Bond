@@ -66,7 +66,6 @@ pub mod constants {
 
 /// Funções utilitárias para integração Aevum-Bond
 pub mod bridge {
-    use super::*;
     use shared::{Hash256, Result};
     
     /// Representa uma transação de bridge entre Bond e Aevum
