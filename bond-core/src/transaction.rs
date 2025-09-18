@@ -1,9 +1,6 @@
-use crate::error::{BondError, BondResult};
-use crate::script::{ScriptVM, ScriptContext, ScriptBuilder, OpCode};
-use crate::utxo::{OutPoint, Utxo, UtxoSet};
+use crate::utxo::OutPoint;
 use serde::{Deserialize, Serialize};
 use shared::{BlockchainError, Hash256, Result};
-use std::collections::HashMap;
 
 /// Input de transação
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
@@ -145,7 +142,7 @@ impl Transaction {
                 .get_utxo(&input.previous_output)
                 .ok_or(BlockchainError::UtxoNotFound)?;
 
-            total = total.checked_add(utxo.output.value).ok_or_else(|| {
+            total = total.checked_add(utxo.value).ok_or_else(|| {
                 BlockchainError::InvalidTransaction("Input value overflow".to_string())
             })?;
         }
@@ -245,75 +242,6 @@ impl Transaction {
 
         base_size + inputs_size + outputs_size
     }
-
-    /// Validate transaction scripts using the script VM
-    pub fn validate_scripts(&self, utxo_set: &UtxoSet) -> BondResult<bool> {
-        // Skip script validation for coinbase transactions
-        if self.is_coinbase() {
-            return Ok(true);
-        }
-
-        for (input_index, input) in self.inputs.iter().enumerate() {
-            // Get the UTXO being spent
-            let utxo = utxo_set.get(&input.previous_output)
-                .ok_or_else(|| BondError::TransactionNotFound(
-                    format!("UTXO not found: {:?}", input.previous_output)
-                ))?;
-
-            // Create script context
-            let tx_hash = self.hash()?.as_bytes().to_vec();
-            let context = ScriptContext {
-                transaction_hash: tx_hash,
-                input_index,
-                public_keys: HashMap::new(), // Could be populated from input/output scripts
-                signatures: vec![],
-            };
-
-            // Execute unlocking script (script_sig) + locking script (script_pubkey)
-            let mut vm = ScriptVM::new();
-            
-            // First execute the unlocking script (script_sig)
-            if !input.script_sig.is_empty() {
-                let unlock_result = vm.execute(&input.script_sig, &context)?;
-                if !unlock_result {
-                    return Ok(false);
-                }
-            }
-
-            // Then execute the locking script (script_pubkey)
-            if !utxo.output.script_pubkey.is_empty() {
-                let lock_result = vm.execute(&utxo.output.script_pubkey, &context)?;
-                if !lock_result {
-                    return Ok(false);
-                }
-            }
-        }
-
-        Ok(true)
-    }
-
-    /// Create a simple Pay-to-Public-Key-Hash (P2PKH) script
-    pub fn create_p2pkh_script(pubkey_hash: &[u8]) -> Vec<u8> {
-        use crate::script::{ScriptBuilder, OpCode};
-        
-        ScriptBuilder::new()
-            .push_opcode(OpCode::OP_DUP)
-            .push_opcode(OpCode::OP_HASH256)
-            .push_data(pubkey_hash)
-            .push_opcode(OpCode::OP_EQUALVERIFY)
-            .push_opcode(OpCode::OP_CHECKSIG)
-            .build()
-    }
-
-    /// Create an unlocking script for P2PKH
-    pub fn create_p2pkh_unlock_script(signature: &[u8], pubkey: &[u8]) -> Vec<u8> {
-        use crate::script::ScriptBuilder;
-        
-        ScriptBuilder::new()
-            .push_data(signature)
-            .push_data(pubkey)
-            .build()
-    }
 }
 
 #[cfg(test)]
@@ -382,53 +310,5 @@ mod tests {
         let tx = Transaction::new(1, vec![input], vec![output], 0);
 
         assert_eq!(tx.fee(&utxo_set).unwrap(), 100);
-    }
-
-    #[test]
-    fn test_p2pkh_script_creation() {
-        let pubkey_hash = vec![0x12, 0x34, 0x56, 0x78, 0x9a, 0xbc, 0xde, 0xf0];
-        let script = Transaction::create_p2pkh_script(&pubkey_hash);
-        
-        // P2PKH script should be: OP_DUP OP_HASH256 <pubkey_hash> OP_EQUALVERIFY OP_CHECKSIG
-        assert!(!script.is_empty());
-        assert!(script.len() > 10); // Should contain opcodes and data
-    }
-
-    #[test]
-    fn test_p2pkh_unlock_script_creation() {
-        let signature = vec![0x30, 0x44, 0x02, 0x20]; // Mock signature
-        let pubkey = vec![0x04, 0x11, 0x22, 0x33]; // Mock public key
-        
-        let script = Transaction::create_p2pkh_unlock_script(&signature, &pubkey);
-        assert!(!script.is_empty());
-        assert!(script.len() > signature.len() + pubkey.len());
-    }
-
-    #[test]
-    fn test_script_validation_with_empty_scripts() {
-        let mut utxo_set = UtxoSet::new();
-        let txid = Hash256::zero();
-        
-        // Create a simple UTXO with empty script
-        let utxo = Utxo::new(txid, 0, 50, vec![], 1);
-        let outpoint = utxo.outpoint();
-        utxo_set.add_utxo(utxo);
-        
-        // Create transaction that spends this UTXO
-        let input = TxInput::new(outpoint, vec![], 0);
-        let output = TxOutput::new(49, vec![]);
-        let tx = Transaction::new(1, vec![input], vec![output], 0);
-        
-        // Should validate successfully with empty scripts
-        assert!(tx.validate_scripts(&utxo_set).unwrap());
-    }
-
-    #[test]
-    fn test_coinbase_script_validation() {
-        let coinbase = Transaction::coinbase(100, 5000, vec![1, 2, 3]);
-        let utxo_set = UtxoSet::new();
-        
-        // Coinbase transactions should skip script validation
-        assert!(coinbase.validate_scripts(&utxo_set).unwrap());
     }
 }

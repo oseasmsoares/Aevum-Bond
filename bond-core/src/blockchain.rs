@@ -325,7 +325,7 @@ impl Blockchain {
             .find_utxos_for_amount(from_script, total_needed)?;
 
         // Calcular valor total dos UTXOs selecionados
-        let total_input: u64 = utxos.iter().map(|utxo| utxo.output.value).sum();
+        let total_input: u64 = utxos.iter().map(|utxo| utxo.value).sum();
 
         // Criar inputs
         let inputs: Vec<_> = utxos

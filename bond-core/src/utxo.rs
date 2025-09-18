@@ -1,43 +1,55 @@
 use serde::{Deserialize, Serialize};
 use shared::{BlockchainError, Hash256, Result};
-use crate::transaction::TxOutput;
 
 /// Representa uma saída de transação não gasta (UTXO)
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct Utxo {
-    /// A saída original da transação
-    pub output: TxOutput,
+    /// Hash da transação que criou este UTXO
+    pub txid: Hash256,
+    /// Índice da saída na transação
+    pub vout: u32,
+    /// Valor em Elos (menor unidade do Bond)
+    pub value: u64,
+    /// Script que define as condições para gastar este UTXO
+    pub script: Vec<u8>,
     /// Altura do bloco onde foi criado (para controle de maturidade)
-    pub height: u64,
+    pub block_height: u64,
 }
 
 impl Utxo {
     /// Cria um novo UTXO
-    pub fn new(txid: Hash256, vout: u32, value: u64, script_pubkey: Vec<u8>, height: u64) -> Self {
+    #[must_use]
+    pub const fn new(
+        txid: Hash256,
+        vout: u32,
+        value: u64,
+        script: Vec<u8>,
+        block_height: u64,
+    ) -> Self {
         Self {
-            output: TxOutput {
-                value,
-                script_pubkey,
-            },
-            height,
+            txid,
+            vout,
+            value,
+            script,
+            block_height,
         }
     }
 
     /// Obtém o identificador único do UTXO
-    pub fn outpoint(&self) -> OutPoint {
-        // Note: Em um sistema real, precisaríamos armazenar o txid e vout
-        // Por agora, vamos usar um placeholder
+    #[must_use]
+    pub const fn outpoint(&self) -> OutPoint {
         OutPoint {
-            txid: Hash256::zero(),
-            vout: 0,
+            txid: self.txid,
+            vout: self.vout,
         }
     }
 
     /// Verifica se o UTXO está maduro (pode ser gasto)
     /// UTXOs de coinbase precisam de 100 blocos para maturar
-    pub fn is_mature(&self, current_height: u64, is_coinbase: bool) -> bool {
+    #[must_use]
+    pub const fn is_mature(&self, current_height: u64, is_coinbase: bool) -> bool {
         if is_coinbase {
-            current_height >= self.height + 100
+            current_height >= self.block_height + 100
         } else {
             true
         }
@@ -53,7 +65,8 @@ pub struct OutPoint {
 
 impl OutPoint {
     /// Cria um novo `OutPoint`
-    pub fn new(txid: Hash256, vout: u32) -> Self {
+    #[must_use]
+    pub const fn new(txid: Hash256, vout: u32) -> Self {
         Self { txid, vout }
     }
 }
@@ -66,6 +79,7 @@ pub struct UtxoSet {
 
 impl UtxoSet {
     /// Cria um novo conjunto vazio de UTXOs
+    #[must_use]
     pub fn new() -> Self {
         Self {
             utxos: std::collections::HashMap::new(),
@@ -73,11 +87,6 @@ impl UtxoSet {
     }
 
     /// Adiciona um UTXO ao conjunto
-    pub fn add(&mut self, outpoint: OutPoint, utxo: Utxo) {
-        self.utxos.insert(outpoint, utxo);
-    }
-
-    /// Adiciona um UTXO ao conjunto (método legado)
     pub fn add_utxo(&mut self, utxo: Utxo) {
         let outpoint = utxo.outpoint();
         self.utxos.insert(outpoint, utxo);
@@ -89,38 +98,40 @@ impl UtxoSet {
     }
 
     /// Obtém um UTXO do conjunto
-    pub fn get(&self, outpoint: &OutPoint) -> Option<&Utxo> {
-        self.utxos.get(outpoint)
-    }
-
-    /// Obtém um UTXO do conjunto (método legado)
+    #[must_use]
     pub fn get_utxo(&self, outpoint: &OutPoint) -> Option<&Utxo> {
         self.utxos.get(outpoint)
     }
 
     /// Verifica se um UTXO existe
+    #[must_use]
     pub fn contains(&self, outpoint: &OutPoint) -> bool {
         self.utxos.contains_key(outpoint)
     }
 
     /// Obtém o valor total de UTXOs controlados por um script específico
+    #[must_use]
     pub fn get_balance_for_script(&self, script: &[u8]) -> u64 {
         self.utxos
             .values()
-            .filter(|utxo| utxo.output.script_pubkey == script)
-            .map(|utxo| utxo.output.value)
+            .filter(|utxo| utxo.script == script)
+            .map(|utxo| utxo.value)
             .sum()
     }
 
     /// Encontra UTXOs suficientes para cobrir um valor específico
+    ///
+    /// # Errors
+    ///
+    /// Retorna erro se não houver UTXOs suficientes para o valor solicitado
     pub fn find_utxos_for_amount(&self, script: &[u8], amount: u64) -> Result<Vec<&Utxo>> {
         let mut selected_utxos = Vec::new();
         let mut total_value = 0u64;
 
         for utxo in self.utxos.values() {
-            if utxo.output.script_pubkey == script {
+            if utxo.script == script {
                 selected_utxos.push(utxo);
-                total_value = total_value.checked_add(utxo.output.value).ok_or_else(|| {
+                total_value = total_value.checked_add(utxo.value).ok_or_else(|| {
                     BlockchainError::InvalidTransaction("Overflow in UTXO selection".to_string())
                 })?;
 
@@ -138,11 +149,13 @@ impl UtxoSet {
     }
 
     /// Retorna o número total de UTXOs
+    #[must_use]
     pub fn len(&self) -> usize {
         self.utxos.len()
     }
 
     /// Verifica se o conjunto está vazio
+    #[must_use]
     pub fn is_empty(&self) -> bool {
         self.utxos.is_empty()
     }
@@ -160,11 +173,13 @@ mod tests {
 
     #[test]
     fn test_utxo_creation() {
-        let utxo = Utxo::new(Hash256::zero(), 0, 5000, vec![1, 2, 3], 100);
+        let txid = Hash256::zero();
+        let utxo = Utxo::new(txid, 0, 5000, vec![1, 2, 3], 100);
 
-        assert_eq!(utxo.output.value, 5000);
-        assert_eq!(utxo.output.script_pubkey, vec![1, 2, 3]);
-        assert_eq!(utxo.height, 100);
+        assert_eq!(utxo.txid, txid);
+        assert_eq!(utxo.vout, 0);
+        assert_eq!(utxo.value, 5000);
+        assert_eq!(utxo.block_height, 100);
     }
 
     #[test]
@@ -183,17 +198,17 @@ mod tests {
     fn test_utxo_set_operations() {
         let mut utxo_set = UtxoSet::new();
         let utxo = Utxo::new(Hash256::zero(), 0, 5000, vec![1, 2, 3], 100);
-        let outpoint = OutPoint::new(Hash256::zero(), 0);
+        let outpoint = utxo.outpoint();
 
         // Adicionar UTXO
-        utxo_set.add(outpoint, utxo.clone());
+        utxo_set.add_utxo(utxo.clone());
         assert!(utxo_set.contains(&outpoint));
         assert_eq!(utxo_set.len(), 1);
 
         // Obter UTXO
-        let retrieved = utxo_set.get(&outpoint);
+        let retrieved = utxo_set.get_utxo(&outpoint);
         assert!(retrieved.is_some());
-        assert_eq!(retrieved.unwrap().output.value, utxo.output.value);
+        assert_eq!(retrieved.unwrap(), &utxo);
 
         // Remover UTXO
         let removed = utxo_set.remove_utxo(&outpoint);
@@ -208,13 +223,9 @@ mod tests {
         let script = vec![1, 2, 3];
 
         // Adicionar UTXOs com o mesmo script
-        let outpoint1 = OutPoint::new(Hash256::zero(), 0);
-        let outpoint2 = OutPoint::new(Hash256::zero(), 1);
-        let outpoint3 = OutPoint::new(Hash256::zero(), 2);
-
-        utxo_set.add(outpoint1, Utxo::new(Hash256::zero(), 0, 1000, script.clone(), 100));
-        utxo_set.add(outpoint2, Utxo::new(Hash256::zero(), 1, 2000, script.clone(), 100));
-        utxo_set.add(outpoint3, Utxo::new(Hash256::zero(), 2, 3000, vec![4, 5, 6], 100));
+        utxo_set.add_utxo(Utxo::new(Hash256::zero(), 0, 1000, script.clone(), 100));
+        utxo_set.add_utxo(Utxo::new(Hash256::zero(), 1, 2000, script.clone(), 100));
+        utxo_set.add_utxo(Utxo::new(Hash256::zero(), 2, 3000, vec![4, 5, 6], 100));
 
         assert_eq!(utxo_set.get_balance_for_script(&script), 3000);
     }
