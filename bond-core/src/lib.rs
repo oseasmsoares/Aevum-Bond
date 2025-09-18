@@ -1,6 +1,8 @@
 pub mod block;
 pub mod blockchain;
+pub mod error;
 pub mod mining;
+pub mod script;
 pub mod transaction;
 pub mod utxo;
 
