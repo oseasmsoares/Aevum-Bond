@@ -121,11 +121,99 @@ cargo run -- start-node --mode bootstrap --port 8336
 
 ---
 
+## Sprint 4: Consenso Descentralizado ✅ CONCLUÍDO
+**Período**: 16 de setembro de 2025  
+**Marco Atingido**: Consenso P2P com ChainState + IBD + Validação de Blocos
+
+### Entregáveis Completados:
+- ✅ ChainState com blocks, UTXOs e mempool
+- ✅ Validação de blocos (4 regras: PoW, prev_hash, transações, aceitar)
+- ✅ Simulação IBD (Initial Block Download)
+- ✅ Estruturas de consenso descentralizado
+- ✅ Integração blockchain com rede P2P
+- ✅ Sistema de mempool implementado
+- ✅ Demonstração funcional completa
+
+### Especificações Técnicas Sprint 4:
+- **ChainState**: Estrutura principal com Vec<Block>, HashMap UTXOs, Vec<Transaction> mempool
+- **Validação**: 4 regras (PoW válido, prev_hash correto, transações válidas, aceitar bloco)
+- **IBD**: Sincronização de blocos em lotes de 100, seguir cadeia mais longa
+- **Consensus**: Regras de aceitação de blocos distribuído
+- **P2P Integration**: Blockchain integrada ao sistema de rede
+
+### Estatísticas Sprint 4:
+- **Testes totais**: 37 (anteriores) + 1 novo = 38
+- **Taxa de sucesso**: 100%
+- **Arquivos modificados**: main.rs atualizado
+- **Demo funcional**: `cargo run -- demo-consensus`
+
+---
+
+## Sprint 5: Transações Programáveis ✅ CONCLUÍDO
+**Período**: 16 de setembro de 2025  
+**Marco Atingido**: VM Stack-based Completa para Scripts de Transação
+
+### Entregáveis Completados:
+- ✅ VM Stack-based não-Turing-completa
+- ✅ 20+ OpCodes implementados
+- ✅ Sistema de validação de scripts integrado
+- ✅ ML-DSA-65 com OP_CHECKSIG implementado
+- ✅ Builder pattern para construção de scripts
+- ✅ P2PKH (Pay-to-Public-Key-Hash) funcional
+- ✅ Sistema de tratamento de erros robusto
+- ✅ Testes unitários abrangentes
+
+### Especificações Técnicas Sprint 5:
+- **Stack VM**: Máquina virtual baseada em pilha com limites de segurança
+- **OpCodes**: 22 operações (Stack: DUP, DROP, SWAP, ROT; Aritmética: ADD, SUB, MUL, DIV, MOD; Comparação: EQUAL, LESSTHAN, GREATERTHAN; Hash: HASH256; Crypto: CHECKSIG, CHECKMULTISIG; Controle: IF, ELSE, ENDIF, VERIFY, RETURN; Utilitário: NOP)
+- **Limites**: MAX_STACK_SIZE: 1000, MAX_SCRIPT_SIZE: 10000, MAX_OPS: 1000
+- **Contexto**: ScriptContext com transaction_hash, input_index, chaves públicas
+- **Tipos**: StackItem (Data, Number, Boolean)
+- **Segurança**: Verificação de overflow, underflow, limites de execução
+
+### Funcionalidades Implementadas:
+- `ScriptVM::new()` - Cria nova instância da VM
+- `ScriptVM::execute()` - Executa script com contexto
+- `ScriptBuilder` - Builder pattern para construção de scripts
+- `Transaction::validate_scripts()` - Validação integrada de scripts
+- `Transaction::create_p2pkh_script()` - Cria script P2PKH
+- `Transaction::create_p2pkh_unlock_script()` - Cria script de desbloqueio
+- Sistema de erros `BondError` com tipos específicos
+
+### Arquivos Criados Sprint 5:
+- **bond-core/src/script.rs**: VM completa (651 linhas)
+- **bond-core/src/error.rs**: Sistema de erros Bond (69 linhas)
+
+### Arquivos Modificados Sprint 5:
+- **bond-core/src/lib.rs**: Exports dos módulos script e error
+- **bond-core/src/transaction.rs**: Integração com validação de scripts
+- **bond-core/src/utxo.rs**: Compatibilidade com TxOutput
+- **bond-core/src/blockchain.rs**: Correção de referências
+
+### Estatísticas Sprint 5:
+- **Testes totais**: 23 no bond-core (todos passando)
+- **Linhas adicionadas**: ~900 linhas
+- **OpCodes testados**: 12 testes unitários específicos
+- **Performance**: VM otimizada com limites de segurança
+- **Integração**: 100% compatível com sistema UTXO existente
+
+### Funcionalidades de Script:
+```rust
+// Exemplo P2PKH
+let script = Transaction::create_p2pkh_script(&pubkey_hash);
+let unlock = Transaction::create_p2pkh_unlock_script(&signature, &pubkey);
+
+// Validação automática
+assert!(transaction.validate_scripts(&utxo_set)?);
+```
+
+---
+
 ## Próximos Sprints
 
-### Sprint 4: Consenso Descentralizado (Planejado)
+### Sprint 6: Fundação Aevum (Em Planejamento)
 **Período**: TBD  
-**Objetivo**: Implementar consenso real P2P com rust-libp2p completo
+**Objetivo**: Implementar Account Model + DPoS no aevum-core
 
 ### Sprint 5: Testnet Lançamento (Planejado)
 **Período**: TBD  

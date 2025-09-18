@@ -3,7 +3,7 @@ use sha3::{Digest, Keccak256};
 use std::fmt;
 
 /// Hash de 256 bits usado para identificar blocos, transações e outros dados
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize, PartialOrd, Ord)]
 pub struct Hash256([u8; 32]);
 
 impl Hash256 {
